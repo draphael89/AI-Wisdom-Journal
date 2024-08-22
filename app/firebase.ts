@@ -2,23 +2,26 @@ import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+let firebaseApp: FirebaseApp | undefined;
+let auth: Auth | undefined;
+let firestore: Firestore | undefined;
 
-let firebaseApp: FirebaseApp;
-let auth: Auth;
-let firestore: Firestore;
+async function initializeFirebase() {
+  if (typeof window !== 'undefined' && !getApps().length) {
+    try {
+      const response = await fetch('/api/firebase-config');
+      const config = await response.json();
 
-if (typeof window !== 'undefined' && !getApps().length) {
-  firebaseApp = initializeApp(firebaseConfig);
-  auth = getAuth(firebaseApp);
-  firestore = getFirestore(firebaseApp);
+      firebaseApp = initializeApp(config);
+      auth = getAuth(firebaseApp);
+      firestore = getFirestore(firebaseApp);
+      console.log('Firebase initialized successfully');
+    } catch (error) {
+      console.error('Error initializing Firebase:', error);
+    }
+  }
 }
+
+initializeFirebase();
 
 export { firebaseApp, auth, firestore };

@@ -7,32 +7,47 @@ import { auth } from './firebase';
  * @returns {User | null | undefined} The current user object, null if not authenticated, or undefined if still initializing
  */
 export function useAuth() {
-  // Use a tri-state for user: null (not authenticated), undefined (initializing), or User (authenticated)
   const [user, setUser] = useState<User | null | undefined>(undefined);
 
   useEffect(() => {
     console.log('Setting up auth state listener');
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        console.log('User authenticated:', firebaseUser.uid);
-        setUser(firebaseUser);
-      } else {
-        console.log('User is not authenticated');
-        setUser(null);
+    const checkAuth = async () => {
+      if (!auth) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for Firebase to initialize
       }
-    }, (error) => {
-      console.error('Error in auth state listener:', error);
-      // Set user to null on error to avoid being stuck in a loading state
-      setUser(null);
-    });
 
-    // Cleanup function to unsubscribe from the listener when the component unmounts
+      if (!auth) {
+        console.error('Firebase auth is not initialized');
+        setUser(null);
+        return;
+      }
+
+      const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        if (firebaseUser) {
+          console.log('User authenticated:', firebaseUser.uid);
+          setUser(firebaseUser);
+        } else {
+          console.log('User is not authenticated');
+          setUser(null);
+        }
+      }, (error) => {
+        console.error('Error in auth state listener:', error);
+        setUser(null);
+      });
+
+      return unsubscribe;
+    };
+
+    const unsubscribe = checkAuth();
+
     return () => {
       console.log('Cleaning up auth state listener');
-      unsubscribe();
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
     };
-  }, []); // Empty dependency array ensures this effect runs only once on mount
+  }, []);
 
   return user;
 }
