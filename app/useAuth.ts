@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged, Unsubscribe } from 'firebase/auth';
 import { auth } from './firebase';
 
 /**
@@ -12,6 +12,8 @@ export function useAuth() {
   useEffect(() => {
     console.log('Setting up auth state listener');
 
+    let unsubscribe: Unsubscribe | undefined;
+
     const checkAuth = async () => {
       if (!auth) {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for Firebase to initialize
@@ -23,7 +25,7 @@ export function useAuth() {
         return;
       }
 
-      const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
         if (firebaseUser) {
           console.log('User authenticated:', firebaseUser.uid);
           setUser(firebaseUser);
@@ -35,15 +37,13 @@ export function useAuth() {
         console.error('Error in auth state listener:', error);
         setUser(null);
       });
-
-      return unsubscribe;
     };
 
-    const unsubscribe = checkAuth();
+    checkAuth();
 
     return () => {
       console.log('Cleaning up auth state listener');
-      if (typeof unsubscribe === 'function') {
+      if (unsubscribe) {
         unsubscribe();
       }
     };
