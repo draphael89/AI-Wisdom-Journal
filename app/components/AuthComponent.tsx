@@ -27,11 +27,21 @@ const AuthComponent: React.FC = () => {
     );
   }
 
+  const handleSignOut = () => {
+    if (auth) {
+      signOut(auth).catch((error) => {
+        console.error('Error signing out:', error);
+      });
+    } else {
+      console.error('Auth is not initialized');
+    }
+  };
+
   return (
     <div className="flex items-center space-x-4">
       <span>{user.email}</span>
       <button
-        onClick={() => signOut(auth)}
+        onClick={handleSignOut}
         className="text-red-600 hover:text-red-800"
       >
         Sign Out

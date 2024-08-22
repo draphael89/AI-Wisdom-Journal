@@ -26,6 +26,12 @@ export default function SignUp() {
       return;
     }
 
+    if (!auth) {
+      setError('Authentication is not initialized');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       router.push('/');
