@@ -16,6 +16,8 @@ interface JournalEntry {
   id: string;
   content: string;
   createdAt: Date;
+  wordCount: number;
+  completed: boolean;
 }
 
 // Define the structure of a calendar event
@@ -25,6 +27,7 @@ interface CalendarEvent extends Event {
   start: Date;
   end: Date;
   allDay: boolean;
+  status: 'completed' | 'incomplete' | 'special';
 }
 
 const JournalCalendar: React.FC = () => {
@@ -40,19 +43,15 @@ const JournalCalendar: React.FC = () => {
     const fetchEntries = async () => {
       if (user) {
         try {
-          // DEBUG: Log user ID before fetching entries
-          console.log('Fetching entries for user:', user.uid);
-          
           const fetchedEntries = await getJournalEntries(user.uid);
-          
-          // DEBUG: Log the number of entries fetched
-          console.log('Fetched entries:', fetchedEntries.length);
           
           // Transform the fetched entries to match the JournalEntry interface
           const transformedEntries: JournalEntry[] = fetchedEntries.map(entry => ({
             id: entry.id,
             content: entry.content,
             createdAt: entry.createdAt.toDate(),
+            wordCount: entry.wordCount,
+            completed: entry.completed,
           }));
           
           setEntries(transformedEntries);
@@ -85,7 +84,43 @@ const JournalCalendar: React.FC = () => {
     start: entry.createdAt,
     end: entry.createdAt,
     allDay: true,
+    status: entry.completed ? 'completed' : 'incomplete',
   }));
+
+  // Add special achievement days (e.g., streaks)
+  const specialDays = calculateSpecialDays(entries);
+  specialDays.forEach(day => {
+    events.push({
+      id: `special-${day.toISOString()}`,
+      title: 'Special Achievement!',
+      start: day,
+      end: day,
+      allDay: true,
+      status: 'special',
+    });
+  });
+
+  const eventStyleGetter = (event: CalendarEvent) => {
+    let style: React.CSSProperties = {
+      borderRadius: '50%',
+      opacity: 0.8,
+      color: 'white',
+      border: 'none',
+      display: 'block',
+      textAlign: 'center',
+      paddingTop: '5px',
+    };
+
+    if (event.status === 'completed') {
+      style.backgroundColor = '#10B981'; // Green
+    } else if (event.status === 'incomplete') {
+      style.backgroundColor = '#6B7280'; // Gray
+    } else if (event.status === 'special') {
+      style.backgroundColor = '#F59E0B'; // Golden
+    }
+
+    return { style };
+  };
 
   return (
     <motion.div
@@ -104,6 +139,7 @@ const JournalCalendar: React.FC = () => {
         onSelectEvent={handleSelectEvent}
         views={['month', 'week', 'day']}
         defaultView='month'
+        eventPropGetter={eventStyleGetter}
       />
       {/* Render the selected entry details */}
       {selectedEntry && (
@@ -117,10 +153,42 @@ const JournalCalendar: React.FC = () => {
             {moment(selectedEntry.createdAt).format('MMMM D, YYYY')}
           </h3>
           <p className="text-gray-700 dark:text-gray-300">{selectedEntry.content}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+            Word count: {selectedEntry.wordCount}
+          </p>
         </motion.div>
       )}
     </motion.div>
   );
 };
+
+function calculateSpecialDays(entries: JournalEntry[]): Date[] {
+  // This is a placeholder implementation. You should implement your own logic
+  // to determine special achievement days based on your requirements.
+  const specialDays: Date[] = [];
+  let streak = 0;
+  let lastEntryDate: Date | null = null;
+
+  entries.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  for (const entry of entries) {
+    if (lastEntryDate) {
+      const dayDifference = Math.floor((entry.createdAt.getTime() - lastEntryDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (dayDifference === 1) {
+        streak++;
+        if (streak % 7 === 0) { // Mark every 7-day streak as special
+          specialDays.push(entry.createdAt);
+        }
+      } else {
+        streak = 1;
+      }
+    } else {
+      streak = 1;
+    }
+    lastEntryDate = entry.createdAt;
+  }
+
+  return specialDays;
+}
 
 export default JournalCalendar;

@@ -10,7 +10,10 @@ export const addJournalEntry = async (userId: string, content: string) => {
     const docRef = await addDoc(collection(firestore as Firestore, 'journalEntries'), {
       userId,
       content,
-      createdAt: new Date()
+      createdAt: new Date(),
+      wordCount: content.trim().split(/\s+/).length,
+      duration: 300, // 5 minutes in seconds
+      completed: true
     });
     console.log("Document written with ID: ", docRef.id);
     return docRef.id;
@@ -31,5 +34,9 @@ export const getJournalEntries = async (userId: string): Promise<DocumentData[]>
     orderBy('createdAt', 'desc')
   );
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    createdAt: doc.data().createdAt.toDate(),
+  }));
 };

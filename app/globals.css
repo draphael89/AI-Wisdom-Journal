@@ -2,34 +2,20 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700;1,900&display=swap');
 
 @layer base {
-  :root {
-    --foreground-rgb: 0, 0, 0;
-    --background-start-rgb: 214, 219, 220;
-    --background-end-rgb: 255, 255, 255;
-  }
-
-  .dark {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+  html, body, #__next {
+    @apply h-full;
   }
 
   body {
-    color: rgb(var(--foreground-rgb));
-    background: linear-gradient(
-        to bottom,
-        transparent,
-        rgb(var(--background-end-rgb))
-      )
-      rgb(var(--background-start-rgb));
-    font-family: 'Inter', sans-serif;
+    @apply bg-gradient-to-br from-primary-50 to-secondary-50 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100;
+    font-family: 'Merriweather', serif;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-bold text-gray-900 dark:text-white;
+    @apply font-serif font-bold text-primary-900 dark:text-primary-100;
   }
 
   h1 { @apply text-4xl mb-6; }
@@ -42,21 +28,13 @@
   p { @apply mb-4 text-gray-700 dark:text-gray-300; }
 }
 
-@layer utilities {
-  .gradient-bg {
-    @apply bg-gradient-to-r from-primary-500 to-secondary-500 dark:from-primary-700 dark:to-secondary-700;
-    background-size: 200% 200%;
-    animation: gradient-x 15s ease infinite;
-  }
-}
-
 @layer components {
   .btn-primary {
-    @apply px-4 py-2 bg-primary-500 text-white rounded-md shadow-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition duration-300 ease-in-out;
+    @apply px-6 py-3 bg-primary-500 text-white rounded-full shadow-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition duration-300 ease-in-out text-lg font-semibold;
   }
 
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-soft p-6;
+    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-6;
   }
 
   .input {
@@ -64,30 +42,96 @@
   }
 }
 
-/* Calendar Styles */
-.rbc-calendar {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-soft p-4;
+.custom-transition {
+  @apply transition-all duration-300 ease-in-out;
 }
 
-.rbc-header {
-  @apply bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-100 font-semibold;
+.focus-within\:ring-2:focus-within {
+  @apply ring-2 ring-primary-500 ring-opacity-50;
 }
 
-.rbc-event {
-  @apply bg-primary-500 dark:bg-primary-700 border-primary-600 dark:border-primary-800;
+.dark-mode-transition {
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-.rbc-today {
-  @apply bg-primary-50 dark:bg-primary-900;
+/* Tiptap editor styles */
+.ProseMirror {
+  @apply h-full overflow-y-auto p-6 font-serif text-lg text-gray-800 dark:text-gray-200 focus:outline-none;
 }
 
-/* Scrollbar Styles */
+.journal-content .ProseMirror {
+  @apply bg-transparent h-full;
+  min-height: calc(100vh - 8rem); /* Adjust based on your header and footer height */
+}
+
+.journal-content, .journal-footer {
+  @apply relative z-10;
+}
+
+.journal-content .ProseMirror p {
+  @apply mb-4 leading-relaxed;
+}
+
+.journal-content .ProseMirror h1, .journal-content .ProseMirror h2, .journal-content .ProseMirror h3, .journal-content .ProseMirror h4, .journal-content .ProseMirror h5, .journal-content .ProseMirror h6 {
+  @apply font-bold text-primary-900 dark:text-primary-100 mb-4;
+}
+
+.journal-content .ProseMirror h1 { @apply text-4xl; }
+.journal-content .ProseMirror h2 { @apply text-3xl; }
+.journal-content .ProseMirror h3 { @apply text-2xl; }
+.journal-content .ProseMirror h4 { @apply text-xl; }
+.journal-content .ProseMirror h5 { @apply text-lg; }
+.journal-content .ProseMirror h6 { @apply text-base; }
+
+.journal-content .ProseMirror ul, .journal-content .ProseMirror ol {
+  @apply ml-6 mb-4;
+}
+
+.journal-content .ProseMirror li {
+  @apply mb-2;
+}
+
+.journal-content .ProseMirror blockquote {
+  @apply border-l-4 border-primary-300 dark:border-primary-700 pl-4 italic my-4;
+}
+
+.journal-footer {
+  @apply h-16;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  @apply text-gray-400 float-left h-0 pointer-events-none;
+  content: attr(data-placeholder);
+}
+
+.journal-card {
+  @apply bg-white bg-opacity-90 dark:bg-gray-800 dark:bg-opacity-90 rounded-lg shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl backdrop-filter backdrop-blur-sm;
+}
+
+.journal-prompt {
+  @apply bg-primary-50 dark:bg-primary-900 border-b border-primary-100 dark:border-primary-800 p-6 transition-colors duration-300;
+}
+
+.journal-content {
+  @apply p-6 transition-colors duration-300 h-full overflow-y-auto;
+}
+
+.journal-content .ProseMirror {
+  @apply h-full;
+  min-height: 100%;
+}
+
+.journal-footer {
+  @apply px-6 py-4 bg-primary-50 dark:bg-primary-900 flex justify-between items-center text-sm text-primary-600 dark:text-primary-300 transition-colors duration-300;
+}
+
+/* Scrollbar styles */
 ::-webkit-scrollbar {
-  width: 8px;
+  @apply w-2;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100 dark:bg-gray-800;
+  @apply bg-gray-100 dark:bg-gray-700;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -98,12 +142,112 @@
   @apply bg-primary-400 dark:bg-primary-600;
 }
 
-/* Transitions */
-.custom-transition {
-  @apply transition-all duration-300 ease-in-out;
+/* Add these styles at the end of the file */
+
+.btn-primary {
+  @apply px-6 py-3 bg-primary-500 text-white rounded-full shadow-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition duration-300 ease-in-out text-lg font-semibold;
 }
 
-/* Focus Styles */
-.focus-within\:ring-2:focus-within {
-  @apply ring-2 ring-primary-500 ring-opacity-50;
+.landing-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(45deg, #667eea, #764ba2);
+}
+
+.feature-card {
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.card-shadow {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.card-hover-shadow {
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+.card-gradient-overlay {
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+.card-text-shadow {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.parallax-effect-glare-scale {
+  transform-style: preserve-3d;
+}
+
+.parallax-effect-glare-scale > div {
+  transform: translateZ(50px);
+}
+
+.carousel-container {
+  perspective: 2000px;
+  overflow: visible;
+}
+
+.carousel-card {
+  transition: all 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.carousel-card:hover {
+  z-index: 1000 !important;
+}
+
+.carousel-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.5) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 0.5rem;
+}
+
+.carousel-card:hover::after {
+  opacity: 1;
+}
+
+.carousel-card img {
+  transition: transform 0.3s ease;
+}
+
+.carousel-card:hover img {
+  transform: scale(1.05);
+}
+
+.carousel-card::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 0.75rem;
+  z-index: -1;
+}
+
+.carousel-card:hover::before {
+  opacity: 1;
 }

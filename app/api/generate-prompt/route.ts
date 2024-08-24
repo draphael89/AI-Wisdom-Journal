@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI(process.env.OPENAI_API_KEY ? undefined : {
-  apiKey: 'YOUR_FALLBACK_API_KEY', // Replace with a fallback key or remove this line
-});
-
 export async function POST() {
   try {
-    if (!openai.apiKey) {
-      throw new Error('OpenAI API key is not configured');
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('OpenAI API key is not configured');
+      return NextResponse.json({ error: 'OpenAI API key is not configured' }, { status: 500 });
     }
 
+    const openai = new OpenAI({ apiKey });
+
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-3.5-turbo",  // You can use gpt-3.5-turbo instead of gpt-4 if you don't have access
       messages: [
         {
           role: "system",

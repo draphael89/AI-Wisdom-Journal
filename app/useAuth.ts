@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { User, onAuthStateChanged, Unsubscribe } from 'firebase/auth';
-import { auth } from './firebase';
+import { User, onAuthStateChanged } from 'firebase/auth';
+import { useFirebase } from './components/FirebaseProvider';
 
 /**
  * Custom hook to handle Firebase authentication state
@@ -8,46 +8,17 @@ import { auth } from './firebase';
  */
 export function useAuth() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
+  const { auth, isInitialized } = useFirebase();
 
   useEffect(() => {
-    console.log('Setting up auth state listener');
+    if (!isInitialized || !auth) return;
 
-    let unsubscribe: Unsubscribe | undefined;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+    });
 
-    const checkAuth = async () => {
-      if (!auth) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for Firebase to initialize
-      }
-
-      if (!auth) {
-        console.error('Firebase auth is not initialized');
-        setUser(null);
-        return;
-      }
-
-      unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-        if (firebaseUser) {
-          console.log('User authenticated:', firebaseUser.uid);
-          setUser(firebaseUser);
-        } else {
-          console.log('User is not authenticated');
-          setUser(null);
-        }
-      }, (error) => {
-        console.error('Error in auth state listener:', error);
-        setUser(null);
-      });
-    };
-
-    checkAuth();
-
-    return () => {
-      console.log('Cleaning up auth state listener');
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, []);
+    return () => unsubscribe();
+  }, [auth, isInitialized]);
 
   return user;
 }
