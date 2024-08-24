@@ -87,6 +87,9 @@ const config: Config = {
       spacing: {
         '70vh': '70vh',
       },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+      },
     },
   },
   plugins: [

@@ -3,13 +3,14 @@ import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import Image from 'next/image';
 import { useCardAnimation, customEase, AnimationStage } from './Hero';
 import Deck from './Deck';
+import StarryBackground from './StarryBackground';
 
 // Enhanced logging function
 const log = (message: string, data?: any) => {
   console.log(`[CardSelection] ${message}`, data ? JSON.stringify(data, null, 2) : '');
 };
 
-interface Card {
+export interface Card {
   id: number;
   image: string;
   alt: string;
@@ -30,25 +31,38 @@ type State = {
   selectionStage: SelectionStage;
   selectedCards: Card[];
   currentCards: Card[];
+  animatingCard: Card | null;
 };
 
 type Action =
   | { type: 'SET_SELECTION_STAGE'; payload: SelectionStage }
   | { type: 'SELECT_CARD'; payload: Card }
-  | { type: 'SET_CURRENT_CARDS'; payload: Card[] };
+  | { type: 'SET_CURRENT_CARDS'; payload: Card[] }
+  | { type: 'ANIMATION_COMPLETE' };
 
 const reducer = (state: State, action: Action): State => {
+  log('Reducer called', { action, currentState: state });
   switch (action.type) {
     case 'SET_SELECTION_STAGE':
+      log('Setting selection stage', { newStage: action.payload });
       return { ...state, selectionStage: action.payload };
     case 'SELECT_CARD':
+      log('Selecting card', { selectedCard: action.payload, currentStage: state.selectionStage });
       return { 
         ...state, 
         selectedCards: [...state.selectedCards, action.payload],
-        selectionStage: state.selectionStage + 1 as SelectionStage
+        animatingCard: action.payload
       };
     case 'SET_CURRENT_CARDS':
+      log('Setting current cards', { newCards: action.payload });
       return { ...state, currentCards: action.payload };
+    case 'ANIMATION_COMPLETE':
+      log('Animation completed', { currentStage: state.selectionStage });
+      return {
+        ...state,
+        animatingCard: null,
+        selectionStage: state.selectionStage + 1 as SelectionStage,
+      };
     default:
       return state;
   }
@@ -56,8 +70,8 @@ const reducer = (state: State, action: Action): State => {
 
 const useResponsiveCardSize = (viewportWidth: number, viewportHeight: number) => {
   return useMemo(() => {
-    const baseSize = Math.min(viewportWidth, viewportHeight) * 0.2; // Reduced from 0.25
-    const maxSize = 350; // Reduced from 400
+    const baseSize = Math.min(viewportWidth, viewportHeight) * 0.2;
+    const maxSize = 350;
     const cardWidth = Math.min(maxSize, Math.max(200, baseSize));
     const cardHeight = cardWidth * (624 / 328);
     log('Calculated card dimensions', { cardWidth, cardHeight, viewportWidth, viewportHeight });
@@ -71,16 +85,45 @@ const CardSelection: React.FC<{
   viewportWidth: number;
   viewportHeight: number;
 }> = ({ initialCards, onSelectionComplete, viewportWidth, viewportHeight }) => {
+  log('CardSelection component rendered', { initialCardsCount: initialCards.length, viewportWidth, viewportHeight });
+
   const [state, dispatch] = useReducer(reducer, {
     selectionStage: SelectionStage.ROUND_ONE,
     selectedCards: [],
     currentCards: [],
+    animatingCard: null,
   });
+
+  const [isAnimating, setIsAnimating] = useState(false);
 
   const { controls, animate, getRandomPosition } = useCardAnimation(4, viewportWidth, viewportHeight);
   const { cardWidth, cardHeight } = useResponsiveCardSize(viewportWidth, viewportHeight);
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const runAnimation = useCallback(async () => {
+    log('Starting animation sequence');
+    await animate(AnimationStage.INITIAL);
+    log('Initial scattered position set');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await animate(AnimationStage.GATHER);
+    log('Cards gathered for selection');
+  }, [animate]);
+
+  const handleAnimationComplete = useCallback(() => {
+    log('Animation completed', { currentStage: state.selectionStage, animatingCard: state.animatingCard });
+    setIsAnimating(false);
+    if (state.selectionStage === SelectionStage.ROUND_THREE) {
+      log('Selection process completed', { finalSelectedCards: [...state.selectedCards, state.animatingCard!] });
+      onSelectionComplete([...state.selectedCards, state.animatingCard!]);
+    } else {
+      dispatch({ type: 'ANIMATION_COMPLETE' });
+      const nextCards = shuffleArray(initialCards).slice(0, 4);
+      log('Next round cards', { nextCards });
+      dispatch({ type: 'SET_CURRENT_CARDS', payload: nextCards });
+      runAnimation(); // Reset and run the animation sequence for the new cards
+    }
+  }, [state.selectionStage, state.selectedCards, state.animatingCard, onSelectionComplete, initialCards, runAnimation]);
 
   useEffect(() => {
     log('Component mounted or updated', { 
@@ -88,7 +131,9 @@ const CardSelection: React.FC<{
       viewportHeight, 
       cardWidth, 
       cardHeight, 
-      currentCards: state.currentCards.length 
+      currentCards: state.currentCards.length,
+      selectionStage: state.selectionStage,
+      selectedCards: state.selectedCards.length
     });
 
     if (containerRef.current) {
@@ -100,37 +145,29 @@ const CardSelection: React.FC<{
         left: rect.left 
       });
     }
-  }, [viewportWidth, viewportHeight, cardWidth, cardHeight, state.currentCards]);
+  }, [viewportWidth, viewportHeight, cardWidth, cardHeight, state]);
 
   const selectCard = useCallback((card: Card) => {
-    log('Card selected', { cardId: card.id, stage: state.selectionStage });
+    log('Card selected', { card, currentStage: state.selectionStage });
     dispatch({ type: 'SELECT_CARD', payload: card });
-    if (state.selectionStage === SelectionStage.ROUND_THREE) {
-      onSelectionComplete([...state.selectedCards, card]);
-    } else {
-      const nextCards = shuffleArray(initialCards).slice(0, 4);
-      dispatch({ type: 'SET_CURRENT_CARDS', payload: nextCards });
-    }
-  }, [state.selectionStage, state.selectedCards, initialCards, onSelectionComplete]);
-
-  const runAnimation = useCallback(async () => {
-    log('Starting animation sequence');
-    await animate(AnimationStage.INITIAL);
-    log('Initial scattered position set');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    await animate(AnimationStage.GATHER);
-    log('Cards gathered for selection');
-  }, [animate]);
+    setIsAnimating(true);
+  }, [state.selectionStage]);
 
   useEffect(() => {
+    log('Initializing card selection', { initialCardsCount: initialCards.length });
     const initialFourCards = shuffleArray(initialCards).slice(0, 4);
+    log('Initial four cards selected', { initialFourCards });
     dispatch({ type: 'SET_CURRENT_CARDS', payload: initialFourCards });
     runAnimation();
   }, [initialCards, runAnimation]);
 
   return (
-    <motion.section className="fixed inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-indigo-900 to-black">
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-indigo-900/70 z-10" />
+    <motion.section 
+      className="fixed inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden"
+      animate={{ backgroundColor: `rgba(0, 0, 0, ${0.5 + state.selectionStage * 0.1})` }}
+    >
+      <StarryBackground intensity={1.5 + state.selectionStage * 0.2} />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-indigo-900/50 z-10" />
       <div 
         ref={containerRef}
         className="w-full h-full flex flex-col items-center justify-center relative z-20"
@@ -151,13 +188,20 @@ const CardSelection: React.FC<{
                   cardHeight={cardHeight}
                   onSelect={selectCard}
                   selectionStage={state.selectionStage}
+                  isSelected={card.id === state.animatingCard?.id}
+                  onAnimationComplete={handleAnimationComplete}
                 />
               ))}
             </AnimatePresence>
           </motion.div>
         </div>
         <div className="w-full mt-8">
-          <Deck selectedCards={state.selectedCards} cardWidth={cardWidth * 0.5} cardHeight={cardHeight * 0.5} />
+          <Deck 
+            selectedCards={state.selectedCards} 
+            cardWidth={cardWidth * 0.5} 
+            cardHeight={cardHeight * 0.5}
+            newCard={state.animatingCard}
+          />
         </div>
       </div>
     </motion.section>
@@ -173,7 +217,11 @@ const SelectionCard: React.FC<{
   cardHeight: number;
   onSelect: (card: Card) => void;
   selectionStage: SelectionStage;
-}> = React.memo(({ card, index, controls, getRandomPosition, cardWidth, cardHeight, onSelect, selectionStage }) => {
+  isSelected: boolean;
+  onAnimationComplete: () => void;
+}> = React.memo(({ card, index, controls, getRandomPosition, cardWidth, cardHeight, onSelect, selectionStage, isSelected, onAnimationComplete }) => {
+  log('SelectionCard rendered', { cardId: card.id, index, isSelected, selectionStage });
+
   const [isFlipped, setIsFlipped] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const cardControls = useAnimation();
@@ -192,11 +240,35 @@ const SelectionCard: React.FC<{
   }, [card.id, cardWidth, cardHeight]);
 
   const handleClick = () => {
+    log('Card clicked', { cardId: card.id });
     setIsFlipped(true);
-    setTimeout(() => onSelect(card), 1500); // Delay selection to allow flip animation
+    onSelect(card);
   };
 
   useEffect(() => {
+    if (isSelected) {
+      log('Starting selected card animation', { cardId: card.id });
+      cardControls.start({
+        scale: 0.8,
+        y: -50,
+        transition: { duration: 0.5, ease: customEase }
+      }).then(() => {
+        log('Selected card animation completed', { cardId: card.id });
+        onAnimationComplete();
+      });
+    } else if (!isSelected && selectionStage !== SelectionStage.ROUND_ONE) {
+      log('Starting unselected card animation', { cardId: card.id });
+      cardControls.start({
+        x: (Math.random() - 0.5) * window.innerWidth * 1.5,
+        y: -window.innerHeight,
+        opacity: 0,
+        transition: { duration: 0.5, ease: customEase }
+      });
+    }
+  }, [isSelected, cardControls, cardHeight, onAnimationComplete, selectionStage, card.id]);
+
+  useEffect(() => {
+    log('Updating card hover effect', { cardId: card.id, isHovered });
     cardControls.start({
       scale: isHovered ? 1.05 : 1,
       boxShadow: isHovered
@@ -204,7 +276,7 @@ const SelectionCard: React.FC<{
         : '0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)',
       transition: { duration: 0.3, ease: customEase }
     });
-  }, [isHovered, cardControls]);
+  }, [isHovered, cardControls, card.id]);
 
   return (
     <motion.div
@@ -215,6 +287,7 @@ const SelectionCard: React.FC<{
       initial={getRandomPosition()}
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
+      exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.3 } }}
       className={`relative cursor-pointer ${!isFlipped && 'animate-pulse-soft'} w-full max-w-md mx-auto`}
       style={{ 
         width: `${cardWidth}px`, 
@@ -223,8 +296,14 @@ const SelectionCard: React.FC<{
         aspectRatio: '328 / 624',
       }}
       onClick={handleClick}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
+      onHoverStart={() => {
+        log('Card hover started', { cardId: card.id });
+        setIsHovered(true);
+      }}
+      onHoverEnd={() => {
+        log('Card hover ended', { cardId: card.id });
+        setIsHovered(false);
+      }}
     >
       <motion.div
         className="w-full h-full rounded-lg overflow-hidden"
@@ -278,11 +357,13 @@ SelectionCard.displayName = 'SelectionCard';
 
 // Reuse the shuffleArray function from Hero.tsx
 function shuffleArray<T>(array: T[]): T[] {
-  for (let i = array.length - 1; i > 0; i--) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return array;
+  log('Array shuffled', { originalLength: array.length, shuffledLength: shuffled.length });
+  return shuffled;
 }
 
 export default CardSelection;

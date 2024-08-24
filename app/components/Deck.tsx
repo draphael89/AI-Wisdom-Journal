@@ -1,45 +1,54 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-
-interface Card {
-  id: number;
-  image: string;
-  alt: string;
-}
+import { Card } from './CardSelection'; // Make sure to import the Card type if it's not already imported
 
 interface DeckProps {
   selectedCards: Card[];
   cardWidth: number;
   cardHeight: number;
+  newCard: Card | null;
 }
 
-const Deck: React.FC<DeckProps> = ({ selectedCards, cardWidth, cardHeight }) => {
+const Deck: React.FC<DeckProps> = ({ selectedCards, cardWidth, cardHeight, newCard }) => {
   return (
-    <div className="mt-8 flex justify-center">
-      {selectedCards.map((card, index) => (
+    <div className="flex justify-center items-center space-x-2">
+      {selectedCards.map((card) => (
         <motion.div
           key={card.id}
           className="relative"
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: index * 0.2 }}
-          style={{
-            width: cardWidth / 2,
-            height: cardHeight / 2,
-            marginLeft: index > 0 ? -cardWidth / 4 : 0,
-          }}
+          style={{ width: cardWidth, height: cardHeight }}
+          initial={{ scale: 0.5 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.3 }}
         >
           <Image
             src={card.image}
             alt={card.alt}
             fill
-            sizes={`${cardWidth / 2}px`}
             style={{ objectFit: 'cover' }}
-            className="rounded-lg shadow-lg"
+            className="rounded-lg"
           />
         </motion.div>
       ))}
+      {newCard && (
+        <motion.div
+          key={newCard.id}
+          className="relative"
+          style={{ width: cardWidth, height: cardHeight }}
+          initial={{ scale: 0.5, y: -100 }}
+          animate={{ scale: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Image
+            src={newCard.image}
+            alt={newCard.alt}
+            fill
+            style={{ objectFit: 'cover' }}
+            className="rounded-lg"
+          />
+        </motion.div>
+      )}
     </div>
   );
 };

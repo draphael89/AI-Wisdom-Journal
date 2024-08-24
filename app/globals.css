@@ -256,3 +256,8 @@
 .full-screen {
   @apply fixed inset-0 w-full h-full;
 }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}

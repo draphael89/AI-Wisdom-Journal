@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useAnimation, useMotionValue, animate, useTran
 import Image from 'next/image';
 import { FaChevronDown, FaFeather } from 'react-icons/fa';
 import CardSelection from './CardSelection';
+import StarryBackground from './StarryBackground';
 
 interface Card {
   id: number;
@@ -115,52 +116,61 @@ const useCardAnimation = (cardCount: number, viewportWidth: number, viewportHeig
   }), [viewportWidth, viewportHeight]);
 
   const animate = useCallback((stage: AnimationStage) => {
-    try {
-      return controls.start(i => {
-        const delay = prefersReducedMotion ? 0 : i * 0.06;
-        switch (stage) {
-          case AnimationStage.INITIAL:
-            return getRandomPosition();
-          case AnimationStage.GATHER:
-            return {
-              opacity: 1, 
-              scale: 1, 
-              x: 0, 
-              y: 0, 
-              rotate: 0,
-              transition: { 
-                duration: 1.2, 
-                delay, 
-                ease: [0.25, 0.1, 0.25, 1],
-                type: 'spring',
-                stiffness: 100,
-                damping: 12
-              }
-            };
-          case AnimationStage.SPREAD:
-            return {
-              x: 0,
-              y: 0,
-              rotate: 0,
-              scale: 1,
-              transition: { 
-                duration: 0.8, 
-                delay: delay * 0.5, 
-                ease: customEase,
-                type: 'spring',
-                stiffness: 200,
-                damping: 20
-              }
-            };
-          case AnimationStage.FAN_OUT:
-            return getRandomPosition();
-        }
-      });
-    } catch (error) {
-      console.error('Animation error:', error);
-      return controls.start({ opacity: 1 });
-    }
+    const animationConfig = (i: number) => {
+      const delay = prefersReducedMotion ? 0 : i * 0.06;
+      switch (stage) {
+        case AnimationStage.INITIAL:
+          return getRandomPosition();
+        case AnimationStage.GATHER:
+          return {
+            opacity: 1, 
+            scale: 1, 
+            x: 0, 
+            y: 0, 
+            rotate: 0,
+            transition: { 
+              duration: 1.2, 
+              delay, 
+              ease: [0.25, 0.1, 0.25, 1],
+              type: 'spring',
+              stiffness: 100,
+              damping: 12
+            }
+          };
+        case AnimationStage.SPREAD:
+          return {
+            x: 0,
+            y: 0,
+            rotate: 0,
+            scale: 1,
+            transition: { 
+              duration: 0.8, 
+              delay: delay * 0.5, 
+              ease: customEase,
+              type: 'spring',
+              stiffness: 200,
+              damping: 20
+            }
+          };
+        case AnimationStage.FAN_OUT:
+          return getRandomPosition();
+      }
+    };
+
+    return new Promise<void>((resolve) => {
+      controls.start(animationConfig)
+        .then(() => resolve())
+        .catch((error) => {
+          console.error('Animation error:', error);
+          controls.set({ opacity: 1 });
+          resolve();
+        });
+    });
   }, [controls, getRandomPosition, prefersReducedMotion]);
+
+  useEffect(() => {
+    controls.set({ opacity: 0 });
+  }, [controls]);
 
   return { controls, animate, getRandomPosition };
 };
@@ -188,10 +198,10 @@ const CardDeck: React.FC<{
     log('Starting animation sequence');
     await animate(AnimationStage.INITIAL);
     log('Initial scattered position set');
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 300));
     await animate(AnimationStage.GATHER);
     log('Gather animation complete');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 200));
     await animate(AnimationStage.SPREAD);
     log('Spread animation complete');
     setIsExpanded(true);
@@ -699,12 +709,12 @@ const Hero: React.FC = () => {
 
   return (
     <motion.section
-      className="relative min-h-screen w-full flex flex-col items-center justify-start overflow-hidden bg-gradient-to-b from-indigo-900 to-black"
+      className="relative min-h-screen w-full flex flex-col items-center justify-start overflow-hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 1 }}
     >
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-indigo-900/70 z-10" />
+      <StarryBackground />
 
       <AnimatePresence mode="wait">
         {state.isLoading ? (
@@ -724,7 +734,7 @@ const Hero: React.FC = () => {
         ) : showCardSelection ? (
           <motion.div
             key="card-selection"
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 w-full h-full z-20"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
