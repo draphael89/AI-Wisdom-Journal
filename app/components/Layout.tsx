@@ -45,7 +45,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
       </AnimatePresence>
 
-      <main className="flex-grow flex">
+      <main className="flex-grow flex relative">
         <div className="w-full h-full">
           {children}
         </div>

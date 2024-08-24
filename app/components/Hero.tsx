@@ -2,6 +2,17 @@ import React, { useEffect, useRef, useReducer, useCallback, useMemo, useState } 
 import { motion, AnimatePresence, useAnimation, useMotionValue, animate, useTransform, useSpring, useReducedMotion, usePresence, LayoutGroup, cubicBezier } from 'framer-motion';
 import Image from 'next/image';
 import { FaChevronDown, FaFeather } from 'react-icons/fa';
+import CardSelection from './CardSelection';
+
+interface Card {
+  id: number;
+  image: string;
+  alt: string;
+  snippet: string;
+  fullQuote: string;
+  tags: string[];
+  theme: string;
+}
 
 // Enhanced logging function
 const log = (message: string, data?: any) => {
@@ -74,6 +85,24 @@ const useResponsiveCardSize = (viewportWidth: number, viewportHeight: number) =>
   }, [viewportWidth, viewportHeight]);
 };
 
+const useResponsiveExpandedCardSize = (viewportWidth: number, viewportHeight: number, isMobile: boolean) => {
+  return useMemo(() => {
+    const aspectRatio = 624 / 328;
+    const maxWidth = isMobile ? Math.min(viewportWidth * 0.9, 600) : viewportWidth * 0.4;
+    const maxHeight = isMobile ? viewportHeight * 0.6 : viewportHeight * 0.8;
+
+    let width = maxWidth;
+    let height = width * aspectRatio;
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height / aspectRatio;
+    }
+
+    return { width, height };
+  }, [viewportWidth, viewportHeight, isMobile]);
+};
+
 const useCardAnimation = (cardCount: number, viewportWidth: number, viewportHeight: number) => {
   const controls = useAnimation();
   const prefersReducedMotion = useReducedMotion();
@@ -137,16 +166,19 @@ const useCardAnimation = (cardCount: number, viewportWidth: number, viewportHeig
 };
 
 const CardDeck: React.FC<{ 
-  initialCards: Array<{ id: number; image: string; alt: string }>;
+  initialCards: Card[];
   onAnimationComplete: () => void;
   viewportWidth: number;
   viewportHeight: number;
-}> = ({ initialCards, onAnimationComplete, viewportWidth, viewportHeight }) => {
+  isMobile: boolean;
+}> = ({ initialCards, onAnimationComplete, viewportWidth, viewportHeight, isMobile }) => {
   const { controls, animate, getRandomPosition } = useCardAnimation(initialCards.length, viewportWidth, viewportHeight);
   const { cardWidth, cardHeight } = useResponsiveCardSize(viewportWidth, viewportHeight);
+  const { width: expandedWidth, height: expandedHeight } = useResponsiveExpandedCardSize(viewportWidth, viewportHeight, isMobile);
   const deckRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [cards, setCards] = useState(initialCards);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const shuffleCards = useCallback(() => {
     setCards(shuffleArray([...initialCards]));
@@ -162,6 +194,7 @@ const CardDeck: React.FC<{
     await new Promise(resolve => setTimeout(resolve, 1000));
     await animate(AnimationStage.SPREAD);
     log('Spread animation complete');
+    setIsExpanded(true);
     onAnimationComplete();
   }, [animate, onAnimationComplete]);
 
@@ -182,11 +215,13 @@ const CardDeck: React.FC<{
   return (
     <motion.div 
       ref={deckRef}
-      className="grid grid-cols-5 gap-4 place-items-center w-full"
+      className="grid place-items-center w-full h-full"
       style={{ 
-        maxWidth: `${cardWidth * 5 + 64}px`,
+        gridTemplateColumns: isExpanded ? '1fr' : 'repeat(5, 1fr)',
+        maxWidth: isExpanded ? `${expandedWidth}px` : `${cardWidth * 5 + 64}px`,
         margin: '0 auto',
-        height: `${cardHeight * 2 + 16}px`
+        height: isExpanded ? `${expandedHeight}px` : `${cardHeight * 2 + 16}px`,
+        transition: 'all 0.5s ease-out',
       }}
       onHoverStart={handleHover}
     >
@@ -201,6 +236,11 @@ const CardDeck: React.FC<{
             cardWidth={cardWidth}
             cardHeight={cardHeight}
             totalCards={cards.length}
+            isExpanded={isExpanded}
+            expandedWidth={expandedWidth}
+            expandedHeight={expandedHeight}
+            viewportWidth={viewportWidth}
+            viewportHeight={viewportHeight}
           />
         ))}
       </AnimatePresence>
@@ -209,14 +249,19 @@ const CardDeck: React.FC<{
 };
 
 const TiltCard: React.FC<{
-  card: { id: number; image: string; alt: string };
+  card: Card;
   index: number;
   controls: any;
   getRandomPosition: () => any;
   cardWidth: number;
   cardHeight: number;
   totalCards: number;
-}> = ({ card, index, controls, getRandomPosition, cardWidth, cardHeight, totalCards }) => {
+  isExpanded: boolean;
+  expandedWidth: number;
+  expandedHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}> = ({ card, index, controls, getRandomPosition, cardWidth, cardHeight, totalCards, isExpanded, expandedWidth, expandedHeight, viewportWidth, viewportHeight }) => {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
 
@@ -246,9 +291,10 @@ const TiltCard: React.FC<{
       initial={getRandomPosition()}
       className="relative cursor-pointer"
       style={{ 
-        width: `${cardWidth}px`, 
-        height: `${cardHeight}px`,
+        width: isExpanded && isTopCard ? expandedWidth : cardWidth,
+        height: isExpanded && isTopCard ? expandedHeight : cardHeight,
         position: 'absolute',
+        transition: 'width 0.5s ease-out, height 0.5s ease-out',
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -386,14 +432,14 @@ const AnimatedWord: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-const ContentReveal: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
+const ContentReveal: React.FC<{ sequence: ReturnType<typeof useAnimationSequence>['sequence']; onForgeClick: () => void; isMobile: boolean }> = ({ sequence, onForgeClick, isMobile }) => {
   const controls = useAnimation();
 
   useEffect(() => {
-    if (isVisible) {
+    if (sequence.cardExpanded) {
       controls.start('visible');
     }
-  }, [isVisible, controls]);
+  }, [sequence.cardExpanded, controls]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -401,8 +447,8 @@ const ContentReveal: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
       opacity: 1,
       transition: {
         when: "beforeChildren",
-        staggerChildren: 0.1,
-        delayChildren: 0.3,
+        staggerChildren: 0.05,
+        delayChildren: 0.1,
       }
     }
   };
@@ -413,51 +459,54 @@ const ContentReveal: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
       opacity: 1, 
       y: 0,
       transition: { 
-        duration: 0.6, 
+        duration: 0.4,
         ease: customEase,
         type: 'spring',
-        stiffness: 100,
-        damping: 10
+        stiffness: 120,
+        damping: 8
       }
     }
   };
 
   return (
     <AnimatePresence>
-      {isVisible && (
+      {sequence.cardExpanded && (
         <motion.div
           variants={containerVariants}
           initial="hidden"
           animate={controls}
           exit="hidden"
-          className="flex flex-col items-center w-full"
+          className={`flex flex-col ${isMobile ? 'items-center' : 'items-start'} w-full`}
         >
           <motion.h1 
-            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-white tracking-wide leading-tight"
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 text-white tracking-wide leading-tight"
             variants={itemVariants}
+            animate={sequence.titleVisible ? 'visible' : 'hidden'}
             style={{
               textShadow: '0 0 10px rgba(255, 255, 255, 0.7), 0 0 20px rgba(255, 255, 255, 0.5), 0 0 30px rgba(255, 255, 255, 0.3)',
               letterSpacing: '0.05em',
               wordSpacing: '0.1em',
-              lineHeight: '1.3',
+              lineHeight: '1.2',
             }}
           >
-            <AnimatedWord text="Seek" />
-            <AnimatedWord text="Wisdom" />
+            <AnimatedWord text="Seeking" />
+            <AnimatedWord text="Wisdom?" />
           </motion.h1>
           <motion.p 
-            className="text-base sm:text-lg md:text-xl lg:text-2xl mb-8 text-indigo-100 max-w-2xl text-center"
+            className={`text-base sm:text-lg md:text-xl lg:text-2xl mb-8 text-indigo-100 max-w-2xl ${isMobile ? 'text-center' : 'text-left'}`}
             variants={itemVariants}
+            animate={sequence.subtitleVisible ? 'visible' : 'hidden'}
             style={{
               textShadow: '0 0 5px rgba(255, 255, 255, 0.5), 0 0 10px rgba(255, 255, 255, 0.3), 0 0 15px rgba(255, 255, 255, 0.2)',
               letterSpacing: '0.03em',
               lineHeight: '1.5',
             }}
           >
-            Converse with legendary minds, and the deepest recesses of your own psyche. 
+            Converse with legendary minds, and plumb the deepest recesses of your own psyche. 
           </motion.p>
           <motion.button
             variants={itemVariants}
+            animate={sequence.ctaVisible ? 'visible' : 'hidden'}
             className="group bg-white/10 backdrop-blur-sm border-2 border-white/50 text-white font-semibold py-3 px-8 rounded-full text-lg shadow-lg hover:bg-white/20 transition duration-300 ease-in-out transform hover:-translate-y-1 flex items-center space-x-2"
             whileHover={{ 
               scale: 1.05,
@@ -467,6 +516,10 @@ const ContentReveal: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
             style={{
               textShadow: '0 0 5px rgba(255, 255, 255, 0.7), 0 0 10px rgba(255, 255, 255, 0.5)',
               boxShadow: '0 0 10px rgba(255, 255, 255, 0.3), 0 0 20px rgba(255, 255, 255, 0.2)',
+            }}
+            onClick={() => {
+              log('Forge button clicked in ContentReveal');
+              onForgeClick();
             }}
           >
             <span>Forge Your Mind</span>
@@ -492,6 +545,85 @@ function shuffleArray<T>(array: T[]): T[] {
   return array;
 }
 
+const useAnimationSequence = () => {
+  const [sequence, setSequence] = useState({
+    cardExpanded: false,
+    titleVisible: false,
+    subtitleVisible: false,
+    ctaVisible: false,
+  });
+
+  const nextStep = useCallback(() => {
+    setSequence(prev => {
+      if (!prev.cardExpanded) return { ...prev, cardExpanded: true };
+      if (!prev.titleVisible) return { ...prev, titleVisible: true };
+      if (!prev.subtitleVisible) return { ...prev, subtitleVisible: true };
+      if (!prev.ctaVisible) return { ...prev, ctaVisible: true };
+      return prev;
+    });
+  }, []);
+
+  return { sequence, nextStep };
+};
+
+const MobileLayout: React.FC<{
+  initialCards: Card[];
+  onAnimationComplete: () => void;
+  sequence: ReturnType<typeof useAnimationSequence>['sequence'];
+  onForgeClick: () => void;
+  viewportWidth: number;
+  viewportHeight: number;
+}> = ({ initialCards, onAnimationComplete, sequence, onForgeClick, viewportWidth, viewportHeight }) => {
+  return (
+    <>
+      <motion.div
+        className="w-full mb-4 sm:mb-6"
+        style={{ height: '60vh' }}
+      >
+        <CardDeck 
+          initialCards={initialCards} 
+          onAnimationComplete={onAnimationComplete} 
+          viewportWidth={viewportWidth}
+          viewportHeight={viewportHeight}
+          isMobile={true}
+        />
+      </motion.div>
+      <motion.div className="w-full">
+        <ContentReveal sequence={sequence} onForgeClick={onForgeClick} isMobile={true} />
+      </motion.div>
+    </>
+  );
+};
+
+const DesktopLayout: React.FC<{
+  initialCards: Card[];
+  onAnimationComplete: () => void;
+  sequence: ReturnType<typeof useAnimationSequence>['sequence'];
+  onForgeClick: () => void;
+  viewportWidth: number;
+  viewportHeight: number;
+}> = ({ initialCards, onAnimationComplete, sequence, onForgeClick, viewportWidth, viewportHeight }) => {
+  return (
+    <>
+      <motion.div
+        className="w-1/2 pr-8"
+        style={{ height: '80vh' }}
+      >
+        <CardDeck 
+          initialCards={initialCards} 
+          onAnimationComplete={onAnimationComplete} 
+          viewportWidth={viewportWidth / 2}
+          viewportHeight={viewportHeight * 0.8}
+          isMobile={false}
+        />
+      </motion.div>
+      <motion.div className="w-1/2 pl-8 flex items-center">
+        <ContentReveal sequence={sequence} onForgeClick={onForgeClick} isMobile={false} />
+      </motion.div>
+    </>
+  );
+};
+
 const Hero: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, {
     animationStage: AnimationStage.INITIAL,
@@ -502,27 +634,31 @@ const Hero: React.FC = () => {
   });
 
   const { width: viewportWidth, height: viewportHeight } = useViewportDimensions();
+  const isMobile = viewportWidth < 1024; // Adjust breakpoint as needed
 
   const initialCards = useMemo(
     () => shuffleArray([
-      { id: 1, image: '/cards/Alan Watts.png', alt: 'Alan Watts Quote' },
-      { id: 2, image: '/cards/Alfred Tennyson.png', alt: 'Alfred Tennyson Quote' },
-      { id: 3, image: '/cards/Baruch Spinoza.png', alt: 'Baruch Spinoza Quote' },
-      { id: 4, image: '/cards/Bruce Lee.png', alt: 'Bruce Lee Quote' },
-      { id: 5, image: '/cards/C.S. Lewis.png', alt: 'C.S. Lewis Quote' },
-      { id: 6, image: '/cards/Carl Jung.png', alt: 'Carl Jung Quote' },
-      { id: 7, image: '/cards/Coco Chanel.png', alt: 'Coco Chanel Quote' },
-      { id: 8, image: '/cards/Isaac Newton.png', alt: 'Isaac Newton Quote' },
-      { id: 9, image: '/cards/James Baldwin.png', alt: 'James Baldwin Quote' },
-      { id: 10, image: '/cards/John Muir.png', alt: 'John Muir Quote' },
-      { id: 11, image: '/cards/Joseph Campbell.png', alt: 'Joseph Campbell Quote' },
-      { id: 12, image: '/cards/Rabindranath Tagore.png', alt: 'Rabindranath Tagore Quote' },
-      { id: 13, image: '/cards/Richard Feynman.png', alt: 'Richard Feynman Quote' },
-      { id: 14, image: '/cards/Thomas Jefferson.png', alt: 'Thomas Jefferson Quote' },
-      { id: 15, image: '/cards/William James.png', alt: 'William James Quote' },
+      { id: 1, image: '/cards/Alan Watts.png', alt: 'Alan Watts Quote', snippet: 'The only way to make sense out of change is to plunge into it, move with it, and join the dance.', fullQuote: 'The only way to make sense out of change is to plunge into it, move with it, and join the dance.', tags: ['change', 'philosophy'], theme: 'wisdom' },
+      { id: 2, image: '/cards/Alfred Tennyson.png', alt: 'Alfred Tennyson Quote', snippet: 'To strive, to seek, to find, and not to yield.', fullQuote: 'To strive, to seek, to find, and not to yield.', tags: ['perseverance', 'poetry'], theme: 'motivation' },
+      { id: 3, image: '/cards/Baruch Spinoza.png', alt: 'Baruch Spinoza Quote', snippet: 'I have striven not to laugh at human actions, not to weep at them, nor to hate them, but to understand them.', fullQuote: 'I have striven not to laugh at human actions, not to weep at them, nor to hate them, but to understand them.', tags: ['understanding', 'philosophy'], theme: 'wisdom' },
+      { id: 4, image: '/cards/Bruce Lee.png', alt: 'Bruce Lee Quote', snippet: 'Empty your mind, be formless, shapeless — like water. Now you put water in a cup, it becomes the cup; You put water into a bottle it becomes the bottle; You put it in a teapot it becomes the teapot. Now water can flow or it can crash. Be water, my friend.', fullQuote: 'Empty your mind, be formless, shapeless — like water. Now you put water in a cup, it becomes the cup; You put water into a bottle it becomes the bottle; You put it in a teapot it becomes the teapot. Now water can flow or it can crash. Be water, my friend.', tags: ['adaptability', 'martial arts'], theme: 'philosophy' },
+      { id: 5, image: '/cards/C.S. Lewis.png', alt: 'C.S. Lewis Quote', snippet: 'You are never too old to set another goal or to dream a new dream.', fullQuote: 'You are never too old to set another goal or to dream a new dream.', tags: ['inspiration', 'goals'], theme: 'motivation' },
+      { id: 6, image: '/cards/Carl Jung.png', alt: 'Carl Jung Quote', snippet: 'Who looks outside, dreams; who looks inside, awakes.', fullQuote: 'Who looks outside, dreams; who looks inside, awakes.', tags: ['psychology', 'self-awareness'], theme: 'introspection' },
+      { id: 7, image: '/cards/Coco Chanel.png', alt: 'Coco Chanel Quote', snippet: 'The most courageous act is still to think for yourself. Aloud.', fullQuote: 'The most courageous act is still to think for yourself. Aloud.', tags: ['individuality', 'courage'], theme: 'self-expression' },
+      { id: 8, image: '/cards/Isaac Newton.png', alt: 'Isaac Newton Quote', snippet: 'If I have seen further it is by standing on the shoulders of Giants.', fullQuote: 'If I have seen further it is by standing on the shoulders of Giants.', tags: ['science', 'humility'], theme: 'knowledge' },
+      { id: 9, image: '/cards/James Baldwin.png', alt: 'James Baldwin Quote', snippet: 'Not everything that is faced can be changed, but nothing can be changed until it is faced.', fullQuote: 'Not everything that is faced can be changed, but nothing can be changed until it is faced.', tags: ['change', 'social justice'], theme: 'activism' },
+      { id: 10, image: '/cards/John Muir.png', alt: 'John Muir Quote', snippet: 'The mountains are calling and I must go.', fullQuote: 'The mountains are calling and I must go.', tags: ['nature', 'adventure'], theme: 'exploration' },
+      { id: 11, image: '/cards/Joseph Campbell.png', alt: 'Joseph Campbell Quote', snippet: 'Follow your bliss and the universe will open doors where there were only walls.', fullQuote: 'Follow your bliss and the universe will open doors where there were only walls.', tags: ['passion', 'mythology'], theme: 'self-discovery' },
+      { id: 12, image: '/cards/Rabindranath Tagore.png', alt: 'Rabindranath Tagore Quote', snippet: 'You can\'t cross the sea merely by standing and staring at the water.', fullQuote: 'You can\'t cross the sea merely by standing and staring at the water.', tags: ['action', 'poetry'], theme: 'motivation' },
+      { id: 13, image: '/cards/Richard Feynman.png', alt: 'Richard Feynman Quote', snippet: 'I would rather have questions that can\'t be answered than answers that can\'t be questioned.', fullQuote: 'I would rather have questions that can\'t be answered than answers that can\'t be questioned.', tags: ['science', 'curiosity'], theme: 'knowledge' },
+      { id: 14, image: '/cards/Thomas Jefferson.png', alt: 'Thomas Jefferson Quote', snippet: 'I like the dreams of the future better than the history of the past.', fullQuote: 'I like the dreams of the future better than the history of the past.', tags: ['future', 'history'], theme: 'progress' },
+      { id: 15, image: '/cards/William James.png', alt: 'William James Quote', snippet: 'Act as if what you do makes a difference. It does.', fullQuote: 'Act as if what you do makes a difference. It does.', tags: ['action', 'psychology'], theme: 'empowerment' },
     ]),
     []
   );
+
+  const [showCardSelection, setShowCardSelection] = useState(false);
+  const { sequence, nextStep } = useAnimationSequence();
 
   useEffect(() => {
     log('Hero component mounted');
@@ -534,19 +670,43 @@ const Hero: React.FC = () => {
 
   const onCardAnimationComplete = useCallback(() => {
     log('Card animation completed');
-    dispatch({ type: 'SET_TEXT_VISIBLE', payload: true });
+    nextStep(); // Trigger card expansion
+    setTimeout(() => {
+      nextStep(); // Show title
+      setTimeout(() => {
+        nextStep(); // Show subtitle
+        setTimeout(() => {
+          nextStep(); // Show CTA
+        }, 200);
+      }, 200);
+    }, 500);
+  }, [nextStep]);
+
+  const handleForgeClick = useCallback(() => {
+    log('handleForgeClick called');
+    setShowCardSelection(true);
+    log('showCardSelection set to true');
   }, []);
+
+  const handleSelectionComplete = useCallback((selectedCards: Card[]) => {
+    log('handleSelectionComplete called', selectedCards);
+    setShowCardSelection(false);
+    log('showCardSelection set to false');
+    // Here you can add logic to handle the selected cards
+  }, []);
+
+  log('Rendering Hero component', { showCardSelection, isLoading: state.isLoading, isTextVisible: state.isTextVisible });
 
   return (
     <motion.section
-      className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-indigo-900 to-black"
+      className="relative min-h-screen w-full flex flex-col items-center justify-start overflow-hidden bg-gradient-to-b from-indigo-900 to-black"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 1 }}
     >
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-indigo-900/70 z-10" />
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {state.isLoading ? (
           <motion.div
             key="loader"
@@ -561,38 +721,50 @@ const Hero: React.FC = () => {
               transition={{ duration: 1, repeat: Infinity, ease: customEase }}
             />
           </motion.div>
+        ) : showCardSelection ? (
+          <motion.div
+            key="card-selection"
+            className="absolute inset-0 w-full h-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <CardSelection
+              initialCards={initialCards.slice(0, 8)} // Ensure we have at least 8 cards
+              onSelectionComplete={handleSelectionComplete}
+              viewportWidth={viewportWidth}
+              viewportHeight={viewportHeight}
+            />
+          </motion.div>
         ) : (
           <motion.div
             key="content"
-            className="container mx-auto px-6 text-center relative z-20 flex flex-col items-center justify-center min-h-screen"
+            className="container mx-auto px-6 relative z-20 flex flex-col lg:flex-row items-center justify-start min-h-screen"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <div className="flex flex-col items-center justify-center w-full h-full">
-              <motion.div
-                initial={{ y: 50 }}
-                animate={{ y: 0 }}
-                transition={{ delay: 0.5, duration: 0.8, ease: "easeOut" }}
-                className="flex-shrink-0"
-                style={{ height: '50vh' }}
-              >
-                <CardDeck 
-                  initialCards={initialCards} 
-                  onAnimationComplete={onCardAnimationComplete} 
-                  viewportWidth={viewportWidth}
-                  viewportHeight={viewportHeight}
-                />
-              </motion.div>
-              <motion.div
-                initial={{ y: 50, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 1, duration: 0.8, ease: "easeOut" }}
-                className="mt-2 flex-grow flex flex-col justify-start"
-              >
-                <ContentReveal isVisible={state.isTextVisible} />
-              </motion.div>
-            </div>
+            {isMobile ? (
+              <MobileLayout
+                initialCards={initialCards}
+                onAnimationComplete={onCardAnimationComplete}
+                sequence={sequence}
+                onForgeClick={handleForgeClick}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
+              />
+            ) : (
+              <DesktopLayout
+                initialCards={initialCards}
+                onAnimationComplete={onCardAnimationComplete}
+                sequence={sequence}
+                onForgeClick={handleForgeClick}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -601,3 +773,6 @@ const Hero: React.FC = () => {
 };
 
 export default Hero;
+
+// Add these exports at the end of the file
+export { useCardAnimation, useResponsiveCardSize, customEase, AnimationStage };

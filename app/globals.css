@@ -251,3 +251,8 @@
 .carousel-card:hover::before {
   opacity: 1;
 }
+
+/* Add this at the end of the file */
+.full-screen {
+  @apply fixed inset-0 w-full h-full;
+}

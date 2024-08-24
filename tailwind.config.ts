@@ -84,6 +84,9 @@ const config: Config = {
           '50%': { opacity: '0.8' },
         },
       },
+      spacing: {
+        '70vh': '70vh',
+      },
     },
   },
   plugins: [
