@@ -16,29 +16,29 @@ interface StarryBackgroundProps {
 
 const StarryBackground: React.FC<StarryBackgroundProps> = ({ intensity = 1 }) => {
   const stars = useMemo(() => {
-    return Array.from({ length: 100 * intensity }, (_, i) => ({
+    return Array.from({ length: 150 * intensity }, (_, i) => ({
       id: i,
       x: `${Math.random() * 100}%`,
       y: `${Math.random() * 100}%`,
-      size: Math.random() * 2 + 1,
-      opacity: Math.min(1, (Math.random() * 0.5 + 0.5) * intensity),
-      blinkDuration: Math.random() * 3 + 2,
+      size: Math.random() * 3 + 0.5,
+      opacity: Math.min(1, (Math.random() * 0.7 + 0.3) * intensity),
+      blinkDuration: Math.random() * 4 + 2,
     }));
   }, [intensity]);
 
   const shootingStars = useMemo(() => {
-    return Array.from({ length: 3 }, (_, i) => ({
+    return Array.from({ length: 5 }, (_, i) => ({
       id: i,
       x: `${Math.random() * 100}%`,
-      y: `${Math.random() * 50}%`,
-      duration: Math.random() * 2 + 1,
-      delay: Math.random() * 5,
+      y: `${Math.random() * 40}%`,
+      duration: Math.random() * 1.5 + 0.5,
+      delay: Math.random() * 8,
     }));
   }, []);
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-b from-indigo-900 via-purple-900 to-black"></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-indigo-950 via-purple-950 to-black"></div>
       <div className="absolute inset-0">
         {stars.map((star) => (
           <motion.div
@@ -51,13 +51,14 @@ const StarryBackground: React.FC<StarryBackgroundProps> = ({ intensity = 1 }) =>
               height: star.size,
             }}
             animate={{
-              opacity: [star.opacity, star.opacity * 0.5, star.opacity],
-              scale: [1, 1.2, 1],
+              opacity: [star.opacity, star.opacity * 0.3, star.opacity],
+              scale: [1, 1.3, 1],
             }}
             transition={{
               duration: star.blinkDuration,
               repeat: Infinity,
               repeatType: "reverse",
+              ease: "easeInOut",
             }}
           />
         ))}
@@ -67,32 +68,34 @@ const StarryBackground: React.FC<StarryBackgroundProps> = ({ intensity = 1 }) =>
             className="absolute w-1 h-1 bg-white rounded-full"
             style={{
               top: star.y,
-              left: "-2%",
+              left: "-5%",
             }}
             animate={{
-              x: ["0%", "104%"],
+              x: ["0%", "110%"],
               opacity: [0, 1, 0],
             }}
             transition={{
               duration: star.duration,
               delay: star.delay,
               repeat: Infinity,
-              repeatDelay: Math.random() * 10 + 5,
+              repeatDelay: Math.random() * 15 + 10,
+              ease: "easeInOut",
             }}
           >
             <motion.div
-              className="absolute top-0 right-0 w-8 h-[1px] bg-gradient-to-l from-white to-transparent"
+              className="absolute top-0 right-0 w-12 h-[1px] bg-gradient-to-l from-white via-white to-transparent"
               style={{ transformOrigin: "right center" }}
-              animate={{ scaleX: [0, 1] }}
+              animate={{ scaleX: [0, 1, 0] }}
               transition={{
-                duration: 0.2,
+                duration: 0.3,
                 repeat: Infinity,
+                ease: "easeOut",
               }}
             />
           </motion.div>
         ))}
       </div>
-      <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-indigo-900/30"></div>
+      <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-indigo-950/40"></div>
     </div>
   );
 };

@@ -47,6 +47,7 @@ const config: Config = {
         'gradient-y': 'gradient-y 15s ease infinite',
         'gradient-xy': 'gradient-xy 15s ease infinite',
         'pulse-soft': 'pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'glow-pulse': 'glow-pulse 2s infinite',
       },
       keyframes: {
         'gradient-y': {
@@ -82,6 +83,10 @@ const config: Config = {
         'pulse-soft': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.8' },
+        },
+        'glow-pulse': {
+          '0%, 100%': { textShadow: '0 0 4px rgba(255,255,255,0.1)' },
+          '50%': { textShadow: '0 0 8px rgba(255,255,255,0.3)' },
         },
       },
       spacing: {

@@ -1,11 +1,12 @@
 import React, { useReducer, useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import { motion, AnimatePresence, useAnimation, Variants } from 'framer-motion';
 import Image from 'next/image';
-import { useCardAnimation, customEase, AnimationStage } from './Hero';
-import Deck from './Deck';
+import { useCardAnimation, AnimationStage } from './Hero';
 import StarryBackground from './StarryBackground';
+import QuizManager from './QuizManager';
+import { easeInOut } from "framer-motion";
+import { bigFiveQuestions } from './QuizManager'; // Add this import
 
-// Enhanced logging function
 const log = (message: string, data?: any) => {
   console.log(`[CardSelection] ${message}`, data ? JSON.stringify(data, null, 2) : '');
 };
@@ -21,9 +22,8 @@ export interface Card {
 }
 
 enum SelectionStage {
-  ROUND_ONE,
-  ROUND_TWO,
-  ROUND_THREE,
+  CARD_SELECTION,
+  QUIZ,
   COMPLETE
 }
 
@@ -32,13 +32,17 @@ type State = {
   selectedCards: Card[];
   currentCards: Card[];
   animatingCard: Card | null;
+  currentQuestionIndex: number;
+  isQuizInProgress: boolean;
 };
 
 type Action =
   | { type: 'SET_SELECTION_STAGE'; payload: SelectionStage }
   | { type: 'SELECT_CARD'; payload: Card }
   | { type: 'SET_CURRENT_CARDS'; payload: Card[] }
-  | { type: 'ANIMATION_COMPLETE' };
+  | { type: 'ANIMATION_COMPLETE' }
+  | { type: 'ANSWER_QUESTION'; answer: number }
+  | { type: 'COMPLETE_QUIZ' };
 
 const reducer = (state: State, action: Action): State => {
   log('Reducer called', { action, currentState: state });
@@ -51,7 +55,10 @@ const reducer = (state: State, action: Action): State => {
       return { 
         ...state, 
         selectedCards: [...state.selectedCards, action.payload],
-        animatingCard: action.payload
+        animatingCard: action.payload,
+        selectionStage: SelectionStage.QUIZ,
+        currentQuestionIndex: 0,
+        isQuizInProgress: true
       };
     case 'SET_CURRENT_CARDS':
       log('Setting current cards', { newCards: action.payload });
@@ -61,7 +68,25 @@ const reducer = (state: State, action: Action): State => {
       return {
         ...state,
         animatingCard: null,
-        selectionStage: state.selectionStage + 1 as SelectionStage,
+      };
+    case 'ANSWER_QUESTION':
+      const newQuestionIndex = state.currentQuestionIndex + 1;
+      if (newQuestionIndex === 10) {
+        return {
+          ...state,
+          selectionStage: SelectionStage.CARD_SELECTION,
+          currentQuestionIndex: 0,
+        };
+      }
+      return {
+        ...state,
+        currentQuestionIndex: newQuestionIndex,
+      };
+    case 'COMPLETE_QUIZ':
+      return {
+        ...state,
+        isQuizInProgress: false,
+        selectionStage: SelectionStage.COMPLETE
       };
     default:
       return state;
@@ -79,19 +104,67 @@ const useResponsiveCardSize = (viewportWidth: number, viewportHeight: number) =>
   }, [viewportWidth, viewportHeight]);
 };
 
-const CardSelection: React.FC<{ 
+const cardVariants: Variants = {
+  initial: (index: number) => ({
+    opacity: 0,
+    scale: 0.8,
+    y: 50,
+    transition: {
+      duration: 0.5,
+      delay: index * 0.1,
+      ease: easeInOut,
+    },
+  }),
+  animate: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.5,
+      ease: easeInOut,
+    },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.8,
+    y: -50,
+    transition: {
+      duration: 0.5,
+      ease: easeInOut,
+    },
+  },
+};
+
+interface CardSelectionProps {
   initialCards: Card[];
-  onSelectionComplete: (selectedCards: Card[]) => void;
+  onSelectionComplete: (selectedCard: Card) => void;
   viewportWidth: number;
   viewportHeight: number;
-}> = ({ initialCards, onSelectionComplete, viewportWidth, viewportHeight }) => {
+  questions: { id: number; text: string; trait: string }[];
+  onQuizComplete: (answer: number) => void;
+  onAssessmentComplete: (cardSelections: Card[], quizAnswers: number[]) => void;
+  isMidAssessment: boolean;
+}
+
+const CardSelection: React.FC<CardSelectionProps> = ({
+  initialCards,
+  onSelectionComplete,
+  viewportWidth,
+  viewportHeight,
+  questions,
+  onQuizComplete,
+  onAssessmentComplete,
+  isMidAssessment
+}) => {
   log('CardSelection component rendered', { initialCardsCount: initialCards.length, viewportWidth, viewportHeight });
 
   const [state, dispatch] = useReducer(reducer, {
-    selectionStage: SelectionStage.ROUND_ONE,
+    selectionStage: SelectionStage.CARD_SELECTION,
     selectedCards: [],
-    currentCards: [],
+    currentCards: initialCards.slice(0, 4), // Only use 4 cards
     animatingCard: null,
+    currentQuestionIndex: 0,
+    isQuizInProgress: false,
   });
 
   const [isAnimating, setIsAnimating] = useState(false);
@@ -113,17 +186,14 @@ const CardSelection: React.FC<{
   const handleAnimationComplete = useCallback(() => {
     log('Animation completed', { currentStage: state.selectionStage, animatingCard: state.animatingCard });
     setIsAnimating(false);
-    if (state.selectionStage === SelectionStage.ROUND_THREE) {
-      log('Selection process completed', { finalSelectedCards: [...state.selectedCards, state.animatingCard!] });
-      onSelectionComplete([...state.selectedCards, state.animatingCard!]);
-    } else {
-      dispatch({ type: 'ANIMATION_COMPLETE' });
-      const nextCards = shuffleArray(initialCards).slice(0, 4);
-      log('Next round cards', { nextCards });
-      dispatch({ type: 'SET_CURRENT_CARDS', payload: nextCards });
-      runAnimation(); // Reset and run the animation sequence for the new cards
-    }
-  }, [state.selectionStage, state.selectedCards, state.animatingCard, onSelectionComplete, initialCards, runAnimation]);
+    dispatch({ type: 'ANIMATION_COMPLETE' });
+  }, [state.selectionStage, state.animatingCard]);
+
+  const handleCardSelect = useCallback((card: Card) => {
+    log('Card selected', { card });
+    dispatch({ type: 'SELECT_CARD', payload: card });
+    // Don't call onSelectionComplete here
+  }, []);
 
   useEffect(() => {
     log('Component mounted or updated', { 
@@ -147,85 +217,96 @@ const CardSelection: React.FC<{
     }
   }, [viewportWidth, viewportHeight, cardWidth, cardHeight, state]);
 
-  const selectCard = useCallback((card: Card) => {
-    log('Card selected', { card, currentStage: state.selectionStage });
-    dispatch({ type: 'SELECT_CARD', payload: card });
-    setIsAnimating(true);
-  }, [state.selectionStage]);
-
   useEffect(() => {
     log('Initializing card selection', { initialCardsCount: initialCards.length });
-    const initialFourCards = shuffleArray(initialCards).slice(0, 4);
-    log('Initial four cards selected', { initialFourCards });
-    dispatch({ type: 'SET_CURRENT_CARDS', payload: initialFourCards });
+    dispatch({ type: 'SET_CURRENT_CARDS', payload: initialCards });
     runAnimation();
   }, [initialCards, runAnimation]);
 
   return (
-    <motion.section 
-      className="fixed inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden"
-      animate={{ backgroundColor: `rgba(0, 0, 0, ${0.5 + state.selectionStage * 0.1})` }}
+    <motion.section
+      className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden"
     >
-      <StarryBackground intensity={1.5 + state.selectionStage * 0.2} />
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-indigo-900/50 z-10" />
-      <div 
+      <StarryBackground />
+      <div
         ref={containerRef}
         className="w-full h-full flex flex-col items-center justify-center relative z-20"
       >
-        <div className="w-full flex-grow flex flex-col justify-center">
-          <motion.div 
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 sm:gap-8 lg:gap-12 place-items-center w-full"
-          >
-            <AnimatePresence>
-              {state.currentCards.map((card, index) => (
-                <SelectionCard
-                  key={card.id}
-                  card={card}
-                  index={index}
-                  controls={controls}
-                  getRandomPosition={getRandomPosition}
-                  cardWidth={cardWidth}
-                  cardHeight={cardHeight}
-                  onSelect={selectCard}
-                  selectionStage={state.selectionStage}
-                  isSelected={card.id === state.animatingCard?.id}
-                  onAnimationComplete={handleAnimationComplete}
-                />
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        </div>
-        <div className="w-full mt-8">
-          <Deck 
-            selectedCards={state.selectedCards} 
-            cardWidth={cardWidth * 0.5} 
-            cardHeight={cardHeight * 0.5}
-            newCard={state.animatingCard}
-          />
-        </div>
+        <AnimatePresence mode="wait">
+          {state.selectionStage === SelectionStage.CARD_SELECTION ? (
+            <motion.div 
+              key="card-selection"
+              className="w-full flex-grow flex flex-col justify-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, ease: easeInOut }}
+            >
+              <motion.div 
+                className="grid grid-cols-2 gap-6 sm:gap-8 lg:gap-12 place-items-center w-full"
+              >
+                {state.currentCards.map((card, index) => (
+                  <SelectionCard
+                    key={card.id}
+                    card={card}
+                    index={index}
+                    onSelect={handleCardSelect}
+                    selectionStage={state.selectionStage}
+                    isSelected={card.id === state.animatingCard?.id}
+                    onAnimationComplete={handleAnimationComplete}
+                    viewportWidth={viewportWidth}
+                    viewportHeight={viewportHeight}
+                  />
+                ))}
+              </motion.div>
+            </motion.div>
+          ) : (
+            <QuizManager
+              selectedCard={state.selectedCards[state.selectedCards.length - 1]}
+              onQuizAnswer={(answer) => {
+                dispatch({ type: 'ANSWER_QUESTION', answer });
+                onQuizComplete(answer);
+              }}
+              questions={questions}
+              currentQuestionIndex={state.currentQuestionIndex}
+              onComplete={() => dispatch({ type: 'COMPLETE_QUIZ' })}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </motion.section>
   );
 };
 
-const SelectionCard: React.FC<{
+interface SelectionCardProps {
   card: Card;
   index: number;
-  controls: any;
-  getRandomPosition: () => any;
-  cardWidth: number;
-  cardHeight: number;
   onSelect: (card: Card) => void;
   selectionStage: SelectionStage;
   isSelected: boolean;
   onAnimationComplete: () => void;
-}> = React.memo(({ card, index, controls, getRandomPosition, cardWidth, cardHeight, onSelect, selectionStage, isSelected, onAnimationComplete }) => {
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+const SelectionCard: React.FC<SelectionCardProps> = React.memo(({ 
+  card, 
+  index, 
+  onSelect, 
+  selectionStage, 
+  isSelected, 
+  onAnimationComplete,
+  viewportWidth,
+  viewportHeight
+}) => {
   log('SelectionCard rendered', { cardId: card.id, index, isSelected, selectionStage });
 
   const [isFlipped, setIsFlipped] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const cardControls = useAnimation();
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const { cardWidth, cardHeight } = useResponsiveCardSize(viewportWidth, viewportHeight);
 
   useEffect(() => {
     if (cardRef.current) {
@@ -251,18 +332,18 @@ const SelectionCard: React.FC<{
       cardControls.start({
         scale: 0.8,
         y: -50,
-        transition: { duration: 0.5, ease: customEase }
+        transition: { duration: 0.5, ease: easeInOut }
       }).then(() => {
         log('Selected card animation completed', { cardId: card.id });
         onAnimationComplete();
       });
-    } else if (!isSelected && selectionStage !== SelectionStage.ROUND_ONE) {
+    } else if (!isSelected && selectionStage !== SelectionStage.CARD_SELECTION) {
       log('Starting unselected card animation', { cardId: card.id });
       cardControls.start({
         x: (Math.random() - 0.5) * window.innerWidth * 1.5,
         y: -window.innerHeight,
         opacity: 0,
-        transition: { duration: 0.5, ease: customEase }
+        transition: { duration: 0.5, ease: easeInOut }
       });
     }
   }, [isSelected, cardControls, cardHeight, onAnimationComplete, selectionStage, card.id]);
@@ -274,7 +355,7 @@ const SelectionCard: React.FC<{
       boxShadow: isHovered
         ? '0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.6)'
         : '0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)',
-      transition: { duration: 0.3, ease: customEase }
+      transition: { duration: 0.3, ease: easeInOut }
     });
   }, [isHovered, cardControls, card.id]);
 
@@ -283,11 +364,12 @@ const SelectionCard: React.FC<{
       ref={cardRef}
       layout
       custom={index}
-      animate={controls}
-      initial={getRandomPosition()}
+      variants={cardVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
-      exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.3 } }}
       className={`relative cursor-pointer ${!isFlipped && 'animate-pulse-soft'} w-full max-w-md mx-auto`}
       style={{ 
         width: `${cardWidth}px`, 
@@ -313,7 +395,7 @@ const SelectionCard: React.FC<{
         <motion.div
           className="absolute w-full h-full backface-hidden"
           animate={{ rotateY: isFlipped ? 180 : 0 }}
-          transition={{ duration: 0.6, ease: customEase }}
+          transition={{ duration: 0.6, ease: easeInOut }}
           style={{ backfaceVisibility: 'hidden' }}
         >
           <Image
@@ -355,7 +437,6 @@ const SelectionCard: React.FC<{
 
 SelectionCard.displayName = 'SelectionCard';
 
-// Reuse the shuffleArray function from Hero.tsx
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {

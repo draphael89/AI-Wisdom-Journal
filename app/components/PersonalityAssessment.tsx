@@ -1,16 +1,14 @@
-import React, { useReducer, useCallback, useEffect } from 'react';
+import React, { useReducer, useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CardSelection, { Card } from './CardSelection';
-import QuizQuestion from './QuizQuestion';
-import ProgressIndicator from './ProgressIndicator';
 import { useCardAnimation, AnimationStage } from './Hero';
+import QuizManager from './QuizManager';
+import ResultsSummary from './ResultsSummary';
 
-// Enhanced logging function
 const log = (message: string, data?: any) => {
   console.log(`[PersonalityAssessment] ${message}`, data ? JSON.stringify(data, null, 2) : '');
 };
 
-// Add shuffleArray function since it's not exported from CardSelection
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -23,31 +21,34 @@ function shuffleArray<T>(array: T[]): T[] {
 interface Question {
   id: number;
   text: string;
+  trait: string;
 }
 
-type Stage = 'card' | 'quiz';
+type Stage = 'card_selection' | 'quiz' | 'complete';
 
 interface State {
   stage: Stage;
   cardSelections: Card[];
   quizAnswers: number[];
-  currentQuestion: number;
   currentCardSet: number;
   currentCards: Card[];
+  currentQuestionIndex: number;
 }
 
 type Action =
   | { type: 'SELECT_CARD'; payload: Card }
   | { type: 'ANSWER_QUESTION'; payload: number }
-  | { type: 'SET_CURRENT_CARDS'; payload: Card[] };
+  | { type: 'SET_CURRENT_CARDS'; payload: Card[] }
+  | { type: 'START_QUIZ' }
+  | { type: 'COMPLETE_ASSESSMENT' };
 
 const initialState: State = {
-  stage: 'card',
+  stage: 'card_selection',
   cardSelections: [],
   quizAnswers: [],
-  currentQuestion: 0,
   currentCardSet: 0,
   currentCards: [],
+  currentQuestionIndex: 0,
 };
 
 const reducer = (state: State, action: Action): State => {
@@ -57,28 +58,34 @@ const reducer = (state: State, action: Action): State => {
       return {
         ...state,
         cardSelections: [...state.cardSelections, action.payload],
-        stage: 'quiz',
         currentCards: [],
+        stage: 'quiz',
       };
     case 'ANSWER_QUESTION':
       const newQuizAnswers = [...state.quizAnswers, action.payload];
-      const newCurrentQuestion = state.currentQuestion + 1;
-      if (newCurrentQuestion % 10 === 0 && newCurrentQuestion < 50) {
+      if (newQuizAnswers.length % 10 === 0 && newQuizAnswers.length < 50) {
         return {
           ...state,
           quizAnswers: newQuizAnswers,
-          currentQuestion: newCurrentQuestion,
-          stage: 'card',
           currentCardSet: state.currentCardSet + 1,
+          stage: 'card_selection',
+          currentQuestionIndex: 0,
         };
+      }
+      if (newQuizAnswers.length === 50) {
+        return { ...state, quizAnswers: newQuizAnswers, stage: 'complete' };
       }
       return {
         ...state,
         quizAnswers: newQuizAnswers,
-        currentQuestion: newCurrentQuestion,
+        currentQuestionIndex: state.currentQuestionIndex + 1,
       };
     case 'SET_CURRENT_CARDS':
       return { ...state, currentCards: action.payload };
+    case 'START_QUIZ':
+      return { ...state, stage: 'quiz' };
+    case 'COMPLETE_ASSESSMENT':
+      return { ...state, stage: 'complete' };
     default:
       return state;
   }
@@ -89,7 +96,8 @@ const PersonalityAssessment: React.FC<{
   questions: Question[];
   viewportWidth: number;
   viewportHeight: number;
-}> = ({ initialCards, questions, viewportWidth, viewportHeight }) => {
+  onComplete: (results: { cardSelections: Card[], quizAnswers: number[] }) => void;
+}> = ({ initialCards, questions, viewportWidth, viewportHeight, onComplete }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { animate } = useCardAnimation(4, viewportWidth, viewportHeight);
 
@@ -101,7 +109,7 @@ const PersonalityAssessment: React.FC<{
   }, [animate]);
 
   useEffect(() => {
-    if (state.stage === 'card' && state.currentCards.length === 0) {
+    if (state.stage === 'card_selection' && state.currentCards.length === 0) {
       const nextCards = shuffleArray(initialCards).slice(0, 4);
       dispatch({ type: 'SET_CURRENT_CARDS', payload: nextCards });
       runCardAnimation();
@@ -116,15 +124,15 @@ const PersonalityAssessment: React.FC<{
     dispatch({ type: 'ANSWER_QUESTION', payload: answer });
   }, []);
 
-  const calculateProgress = useCallback(() => {
-    return (state.currentCardSet * 10 + state.currentQuestion) / 50;
-  }, [state.currentCardSet, state.currentQuestion]);
+  const handleAssessmentComplete = useCallback(() => {
+    onComplete({ cardSelections: state.cardSelections, quizAnswers: state.quizAnswers });
+    dispatch({ type: 'COMPLETE_ASSESSMENT' });
+  }, [onComplete, state.cardSelections, state.quizAnswers]);
 
   return (
     <div className="fixed inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden">
-      <ProgressIndicator progress={calculateProgress()} />
       <AnimatePresence mode="wait">
-        {state.stage === 'card' && (
+        {state.stage === 'card_selection' && (
           <motion.div
             key="card-selection"
             initial={{ opacity: 0 }}
@@ -134,23 +142,46 @@ const PersonalityAssessment: React.FC<{
           >
             <CardSelection
               initialCards={state.currentCards}
-              onSelectionComplete={(selectedCards) => handleCardSelect(selectedCards[0])}
+              onSelectionComplete={handleCardSelect}
               viewportWidth={viewportWidth}
               viewportHeight={viewportHeight}
+              isMidAssessment={state.cardSelections.length > 0}
+              questions={questions}
+              onQuizComplete={handleQuizAnswer}
+              onAssessmentComplete={handleAssessmentComplete}
             />
           </motion.div>
         )}
         {state.stage === 'quiz' && (
           <motion.div
-            key="quiz-question"
+            key="quiz"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <QuizQuestion
-              question={questions[state.currentQuestion]}
-              onAnswer={handleQuizAnswer}
+            <QuizManager
+              selectedCard={state.cardSelections[state.cardSelections.length - 1]}
+              onQuizAnswer={handleQuizAnswer}
+              questions={questions}
+              currentQuestionIndex={state.currentQuestionIndex}
+              onComplete={handleAssessmentComplete}
+            />
+          </motion.div>
+        )}
+        {state.stage === 'complete' && (
+          <motion.div
+            key="assessment-complete"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="w-full max-w-2xl mx-auto"
+          >
+            <ResultsSummary
+              cardSelections={state.cardSelections}
+              quizAnswers={state.quizAnswers}
+              questions={questions}
             />
           </motion.div>
         )}

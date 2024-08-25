@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { FaChevronDown, FaFeather } from 'react-icons/fa';
 import CardSelection from './CardSelection';
 import StarryBackground from './StarryBackground';
+import { bigFiveQuestions } from './QuizManager'; // Add this import at the top of the file
 
 interface Card {
   id: number;
@@ -116,61 +117,52 @@ const useCardAnimation = (cardCount: number, viewportWidth: number, viewportHeig
   }), [viewportWidth, viewportHeight]);
 
   const animate = useCallback((stage: AnimationStage) => {
-    const animationConfig = (i: number) => {
-      const delay = prefersReducedMotion ? 0 : i * 0.06;
-      switch (stage) {
-        case AnimationStage.INITIAL:
-          return getRandomPosition();
-        case AnimationStage.GATHER:
-          return {
-            opacity: 1, 
-            scale: 1, 
-            x: 0, 
-            y: 0, 
-            rotate: 0,
-            transition: { 
-              duration: 1.2, 
-              delay, 
-              ease: [0.25, 0.1, 0.25, 1],
-              type: 'spring',
-              stiffness: 100,
-              damping: 12
-            }
-          };
-        case AnimationStage.SPREAD:
-          return {
-            x: 0,
-            y: 0,
-            rotate: 0,
-            scale: 1,
-            transition: { 
-              duration: 0.8, 
-              delay: delay * 0.5, 
-              ease: customEase,
-              type: 'spring',
-              stiffness: 200,
-              damping: 20
-            }
-          };
-        case AnimationStage.FAN_OUT:
-          return getRandomPosition();
-      }
-    };
-
-    return new Promise<void>((resolve) => {
-      controls.start(animationConfig)
-        .then(() => resolve())
-        .catch((error) => {
-          console.error('Animation error:', error);
-          controls.set({ opacity: 1 });
-          resolve();
-        });
-    });
+    try {
+      return controls.start(i => {
+        const delay = prefersReducedMotion ? 0 : i * 0.06;
+        switch (stage) {
+          case AnimationStage.INITIAL:
+            return getRandomPosition();
+          case AnimationStage.GATHER:
+            return {
+              opacity: 1, 
+              scale: 1, 
+              x: 0, 
+              y: 0, 
+              rotate: 0,
+              transition: { 
+                duration: 1.2, 
+                delay, 
+                ease: [0.25, 0.1, 0.25, 1],
+                type: 'spring',
+                stiffness: 100,
+                damping: 12
+              }
+            };
+          case AnimationStage.SPREAD:
+            return {
+              x: 0,
+              y: 0,
+              rotate: 0,
+              scale: 1,
+              transition: { 
+                duration: 0.8, 
+                delay: delay * 0.5, 
+                ease: customEase,
+                type: 'spring',
+                stiffness: 200,
+                damping: 20
+              }
+            };
+          case AnimationStage.FAN_OUT:
+            return getRandomPosition();
+        }
+      });
+    } catch (error) {
+      console.error('Animation error:', error);
+      return controls.start({ opacity: 1 });
+    }
   }, [controls, getRandomPosition, prefersReducedMotion]);
-
-  useEffect(() => {
-    controls.set({ opacity: 0 });
-  }, [controls]);
 
   return { controls, animate, getRandomPosition };
 };
@@ -198,10 +190,10 @@ const CardDeck: React.FC<{
     log('Starting animation sequence');
     await animate(AnimationStage.INITIAL);
     log('Initial scattered position set');
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 500));
     await animate(AnimationStage.GATHER);
     log('Gather animation complete');
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     await animate(AnimationStage.SPREAD);
     log('Spread animation complete');
     setIsExpanded(true);
@@ -698,11 +690,16 @@ const Hero: React.FC = () => {
     log('showCardSelection set to true');
   }, []);
 
-  const handleSelectionComplete = useCallback((selectedCards: Card[]) => {
-    log('handleSelectionComplete called', selectedCards);
+  const handleSelectionComplete = useCallback((selectedCard: Card) => {
+    log('handleSelectionComplete called', { selectedCard });
     setShowCardSelection(false);
     log('showCardSelection set to false');
-    // Here you can add logic to handle the selected cards
+    // Here you can add logic to handle the selected card
+  }, []);
+
+  const handleAssessmentComplete = useCallback((cardSelections: Card[], quizAnswers: number[]) => {
+    console.log('Assessment completed', { cardSelections, quizAnswers });
+    // Add any additional logic you want to perform when the assessment is complete
   }, []);
 
   log('Rendering Hero component', { showCardSelection, isLoading: state.isLoading, isTextVisible: state.isTextVisible });
@@ -741,10 +738,16 @@ const Hero: React.FC = () => {
             transition={{ duration: 0.5 }}
           >
             <CardSelection
-              initialCards={initialCards.slice(0, 8)} // Ensure we have at least 8 cards
+              initialCards={initialCards.slice(0, 4)} // Only pass 4 cards
               onSelectionComplete={handleSelectionComplete}
               viewportWidth={viewportWidth}
               viewportHeight={viewportHeight}
+              questions={bigFiveQuestions}
+              onQuizComplete={(answer) => {
+                console.log('Quiz answer:', answer);
+              }}
+              onAssessmentComplete={handleAssessmentComplete}
+              isMidAssessment={false}
             />
           </motion.div>
         ) : (
