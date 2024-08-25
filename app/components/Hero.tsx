@@ -108,6 +108,11 @@ const useResponsiveExpandedCardSize = (viewportWidth: number, viewportHeight: nu
 const useCardAnimation = (cardCount: number, viewportWidth: number, viewportHeight: number) => {
   const controls = useAnimation();
   const prefersReducedMotion = useReducedMotion();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const getRandomPosition = useCallback(() => ({
     x: (Math.random() - 0.5) * viewportWidth * 0.6,
@@ -117,6 +122,11 @@ const useCardAnimation = (cardCount: number, viewportWidth: number, viewportHeig
   }), [viewportWidth, viewportHeight]);
 
   const animate = useCallback((stage: AnimationStage) => {
+    if (!isMounted) {
+      console.warn('Attempting to animate before component is mounted');
+      return Promise.resolve();
+    }
+
     try {
       return controls.start(i => {
         const delay = prefersReducedMotion ? 0 : i * 0.06;
@@ -156,13 +166,15 @@ const useCardAnimation = (cardCount: number, viewportWidth: number, viewportHeig
             };
           case AnimationStage.FAN_OUT:
             return getRandomPosition();
+          default:
+            return {};
         }
       });
     } catch (error) {
       console.error('Animation error:', error);
-      return controls.start({ opacity: 1 });
+      return Promise.resolve();
     }
-  }, [controls, getRandomPosition, prefersReducedMotion]);
+  }, [controls, getRandomPosition, prefersReducedMotion, isMounted]);
 
   return { controls, animate, getRandomPosition };
 };

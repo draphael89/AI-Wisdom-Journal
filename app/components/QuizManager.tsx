@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import QuizQuestion from './QuizQuestion';
 import { Card } from './CardSelection';
-import ProgressBar from './ProgressBar'; // New component to be created
+import ProgressBar from './ProgressBar';
 
 const QUESTIONS_PER_BATCH = 5;
 
@@ -60,64 +60,49 @@ interface QuizManagerProps {
   onComplete: () => void;
 }
 
-const QuizManager: React.FC<QuizManagerProps> = ({ 
-  selectedCard, 
-  onQuizAnswer, 
-  questions, 
+const QuizManager: React.FC<QuizManagerProps> = React.memo(({
+  selectedCard,
+  onQuizAnswer,
+  questions,
   currentQuestionIndex,
-  onComplete
+  onComplete,
 }) => {
-  const [currentBatch, setCurrentBatch] = useState(0);
+  const currentQuestion = questions[currentQuestionIndex];
+  const [isLoading, setIsLoading] = useState(true);
 
-  const shuffledQuestions = useMemo(() => shuffleQuestions(questions), [questions]);
+  useEffect(() => {
+    setIsLoading(false);
+  }, [currentQuestionIndex]);
 
-  const currentQuestions = useMemo(() => {
-    const startIndex = currentBatch * QUESTIONS_PER_BATCH;
-    return shuffledQuestions.slice(startIndex, startIndex + QUESTIONS_PER_BATCH);
-  }, [shuffledQuestions, currentBatch]);
-
-  const handleAnswer = useCallback((answer: number) => {
+  const handleAnswer = (answer: number) => {
     onQuizAnswer(answer);
-    if (currentQuestionIndex + 1 >= (currentBatch + 1) * QUESTIONS_PER_BATCH) {
-      if (currentBatch + 1 < questions.length / QUESTIONS_PER_BATCH) {
-        setCurrentBatch(prev => prev + 1);
-      } else {
-        onComplete();
-      }
+    if (currentQuestionIndex === questions.length - 1) {
+      onComplete();
     }
-  }, [currentQuestionIndex, currentBatch, questions.length, onQuizAnswer, onComplete]);
-
-  const progress = (currentQuestionIndex + 1) / questions.length;
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="w-full max-w-2xl mx-auto"
-    >
-      <ProgressBar progress={progress} />
+    <div className="w-full h-full">
       <AnimatePresence mode="wait">
-        {currentQuestions.map((question, index) => (
+        {!isLoading && currentQuestion && (
           <motion.div
-            key={question.id}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
+            key={currentQuestionIndex}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            style={{ display: index === currentQuestionIndex % QUESTIONS_PER_BATCH ? 'block' : 'none' }}
           >
             <QuizQuestion
-              question={question}
+              question={currentQuestion}
               onAnswer={handleAnswer}
               currentQuestionIndex={currentQuestionIndex}
               totalQuestions={questions.length}
             />
           </motion.div>
-        ))}
+        )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
-};
+});
 
-export default React.memo(QuizManager);
+export default QuizManager;

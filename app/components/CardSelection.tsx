@@ -5,7 +5,6 @@ import { useCardAnimation, AnimationStage } from './Hero';
 import StarryBackground from './StarryBackground';
 import QuizManager from './QuizManager';
 import { easeInOut } from "framer-motion";
-import { bigFiveQuestions } from './QuizManager'; // Add this import
 
 const log = (message: string, data?: any) => {
   console.log(`[CardSelection] ${message}`, data ? JSON.stringify(data, null, 2) : '');
@@ -52,11 +51,12 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, selectionStage: action.payload };
     case 'SELECT_CARD':
       log('Selecting card', { selectedCard: action.payload, currentStage: state.selectionStage });
-      return { 
-        ...state, 
+      return {
+        ...state,
         selectedCards: [...state.selectedCards, action.payload],
-        animatingCard: action.payload,
+        currentCards: [],
         selectionStage: SelectionStage.QUIZ,
+        animatingCard: action.payload,
         currentQuestionIndex: 0,
         isQuizInProgress: true
       };
@@ -156,16 +156,18 @@ const CardSelection: React.FC<CardSelectionProps> = ({
   onAssessmentComplete,
   isMidAssessment
 }) => {
-  log('CardSelection component rendered', { initialCardsCount: initialCards.length, viewportWidth, viewportHeight });
+  log('CardSelection rendered', { initialCardsCount: initialCards.length, viewportWidth, viewportHeight, isMidAssessment });
 
   const [state, dispatch] = useReducer(reducer, {
     selectionStage: SelectionStage.CARD_SELECTION,
     selectedCards: [],
-    currentCards: initialCards.slice(0, 4), // Only use 4 cards
+    currentCards: initialCards.slice(0, 4),
     animatingCard: null,
     currentQuestionIndex: 0,
     isQuizInProgress: false,
   });
+
+  log('CardSelection state', state);
 
   const [isAnimating, setIsAnimating] = useState(false);
 
@@ -192,11 +194,10 @@ const CardSelection: React.FC<CardSelectionProps> = ({
   const handleCardSelect = useCallback((card: Card) => {
     log('Card selected', { card });
     dispatch({ type: 'SELECT_CARD', payload: card });
-    // Don't call onSelectionComplete here
   }, []);
 
   useEffect(() => {
-    log('Component mounted or updated', { 
+    log('CardSelection effect', { 
       viewportWidth, 
       viewportHeight, 
       cardWidth, 
@@ -223,6 +224,38 @@ const CardSelection: React.FC<CardSelectionProps> = ({
     runAnimation();
   }, [initialCards, runAnimation]);
 
+  const CardGrid = useMemo(() => {
+    const GridComponent = ({ height, width }: { height: number; width: number }) => (
+      <div 
+        style={{ 
+          height, 
+          width, 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '16px',
+          justifyContent: 'center',
+          alignContent: 'center',
+        }}
+      >
+        {state.currentCards.map((card, index) => (
+          <SelectionCard
+            key={card.id}
+            card={card}
+            index={index}
+            onSelect={handleCardSelect}
+            selectionStage={state.selectionStage}
+            isSelected={card.id === state.animatingCard?.id}
+            onAnimationComplete={handleAnimationComplete}
+            viewportWidth={viewportWidth}
+            viewportHeight={viewportHeight}
+          />
+        ))}
+      </div>
+    );
+    GridComponent.displayName = 'CardGrid';
+    return GridComponent;
+  }, [state.currentCards, handleCardSelect, state.selectionStage, state.animatingCard, handleAnimationComplete, viewportWidth, viewportHeight]);
+
   return (
     <motion.section
       className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden"
@@ -232,45 +265,42 @@ const CardSelection: React.FC<CardSelectionProps> = ({
         ref={containerRef}
         className="w-full h-full flex flex-col items-center justify-center relative z-20"
       >
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="sync">
           {state.selectionStage === SelectionStage.CARD_SELECTION ? (
             <motion.div 
               key="card-selection"
-              className="w-full flex-grow flex flex-col justify-center"
+              className="w-full h-full flex justify-center items-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.5, ease: easeInOut }}
             >
-              <motion.div 
-                className="grid grid-cols-2 gap-6 sm:gap-8 lg:gap-12 place-items-center w-full"
-              >
-                {state.currentCards.map((card, index) => (
-                  <SelectionCard
-                    key={card.id}
-                    card={card}
-                    index={index}
-                    onSelect={handleCardSelect}
-                    selectionStage={state.selectionStage}
-                    isSelected={card.id === state.animatingCard?.id}
-                    onAnimationComplete={handleAnimationComplete}
-                    viewportWidth={viewportWidth}
-                    viewportHeight={viewportHeight}
-                  />
-                ))}
-              </motion.div>
+              <CardGrid height={viewportHeight * 0.9} width={viewportWidth * 0.9} />
             </motion.div>
           ) : (
-            <QuizManager
-              selectedCard={state.selectedCards[state.selectedCards.length - 1]}
-              onQuizAnswer={(answer) => {
-                dispatch({ type: 'ANSWER_QUESTION', answer });
-                onQuizComplete(answer);
-              }}
-              questions={questions}
-              currentQuestionIndex={state.currentQuestionIndex}
-              onComplete={() => dispatch({ type: 'COMPLETE_QUIZ' })}
-            />
+            <motion.div
+              key="quiz-manager"
+              className="w-full h-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, ease: easeInOut }}
+            >
+              <QuizManager
+                selectedCard={state.selectedCards[state.selectedCards.length - 1]}
+                onQuizAnswer={(answer) => {
+                  log('Quiz answer received', { answer });
+                  dispatch({ type: 'ANSWER_QUESTION', answer });
+                  onQuizComplete(answer);
+                }}
+                questions={questions}
+                currentQuestionIndex={state.currentQuestionIndex}
+                onComplete={() => {
+                  log('Quiz completed');
+                  dispatch({ type: 'COMPLETE_QUIZ' });
+                }}
+              />
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
@@ -370,7 +400,7 @@ const SelectionCard: React.FC<SelectionCardProps> = React.memo(({
       exit="exit"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
-      className={`relative cursor-pointer ${!isFlipped && 'animate-pulse-soft'} w-full max-w-md mx-auto`}
+      className="group relative cursor-pointer w-full max-w-md mx-auto"
       style={{ 
         width: `${cardWidth}px`, 
         height: `${cardHeight}px`,
@@ -378,14 +408,8 @@ const SelectionCard: React.FC<SelectionCardProps> = React.memo(({
         aspectRatio: '328 / 624',
       }}
       onClick={handleClick}
-      onHoverStart={() => {
-        log('Card hover started', { cardId: card.id });
-        setIsHovered(true);
-      }}
-      onHoverEnd={() => {
-        log('Card hover ended', { cardId: card.id });
-        setIsHovered(false);
-      }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
     >
       <motion.div
         className="w-full h-full rounded-lg overflow-hidden"
@@ -407,8 +431,7 @@ const SelectionCard: React.FC<SelectionCardProps> = React.memo(({
             className="rounded-lg"
           />
           <motion.div
-            className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300"
-            animate={{ opacity: isHovered ? 1 : 0 }}
+            className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           />
         </motion.div>
         <motion.div

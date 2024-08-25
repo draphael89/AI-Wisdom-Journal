@@ -1,9 +1,11 @@
-import React, { useReducer, useCallback, useEffect, useState } from 'react';
+import React, { useReducer, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CardSelection, { Card } from './CardSelection';
 import { useCardAnimation, AnimationStage } from './Hero';
 import QuizManager from './QuizManager';
 import ResultsSummary from './ResultsSummary';
+import ProgressBar from './ProgressBar';
+import StarryBackground from './StarryBackground';
 
 const log = (message: string, data?: any) => {
   console.log(`[PersonalityAssessment] ${message}`, data ? JSON.stringify(data, null, 2) : '');
@@ -97,8 +99,12 @@ const PersonalityAssessment: React.FC<{
   viewportWidth: number;
   viewportHeight: number;
   onComplete: (results: { cardSelections: Card[], quizAnswers: number[] }) => void;
-}> = ({ initialCards, questions, viewportWidth, viewportHeight, onComplete }) => {
+}> = React.memo(({ initialCards, questions, viewportWidth, viewportHeight, onComplete }) => {
+  log('PersonalityAssessment rendered', { initialCardsCount: initialCards.length, questionsCount: questions.length, viewportWidth, viewportHeight });
+
   const [state, dispatch] = useReducer(reducer, initialState);
+  log('PersonalityAssessment state', state);
+
   const { animate } = useCardAnimation(4, viewportWidth, viewportHeight);
 
   const runCardAnimation = useCallback(async () => {
@@ -106,10 +112,12 @@ const PersonalityAssessment: React.FC<{
     await animate(AnimationStage.INITIAL);
     await new Promise(resolve => setTimeout(resolve, 500));
     await animate(AnimationStage.GATHER);
+    log('Card animation sequence completed');
   }, [animate]);
 
   useEffect(() => {
     if (state.stage === 'card_selection' && state.currentCards.length === 0) {
+      log('Initializing new card set');
       const nextCards = shuffleArray(initialCards).slice(0, 4);
       dispatch({ type: 'SET_CURRENT_CARDS', payload: nextCards });
       runCardAnimation();
@@ -117,77 +125,126 @@ const PersonalityAssessment: React.FC<{
   }, [state.stage, state.currentCards, initialCards, runCardAnimation]);
 
   const handleCardSelect = useCallback((selectedCard: Card) => {
+    log('Card selected', { selectedCard });
     dispatch({ type: 'SELECT_CARD', payload: selectedCard });
   }, []);
 
   const handleQuizAnswer = useCallback((answer: number) => {
+    log('Quiz answer received', { answer });
     dispatch({ type: 'ANSWER_QUESTION', payload: answer });
   }, []);
 
   const handleAssessmentComplete = useCallback(() => {
+    log('Assessment completed', { cardSelections: state.cardSelections, quizAnswers: state.quizAnswers });
     onComplete({ cardSelections: state.cardSelections, quizAnswers: state.quizAnswers });
     dispatch({ type: 'COMPLETE_ASSESSMENT' });
   }, [onComplete, state.cardSelections, state.quizAnswers]);
 
+  const memoizedCardSelection = useMemo(() => (
+    <CardSelection
+      initialCards={state.currentCards}
+      onSelectionComplete={handleCardSelect}
+      viewportWidth={viewportWidth}
+      viewportHeight={viewportHeight}
+      isMidAssessment={state.cardSelections.length > 0}
+      questions={questions}
+      onQuizComplete={handleQuizAnswer}
+      onAssessmentComplete={handleAssessmentComplete}
+    />
+  ), [state.currentCards, handleCardSelect, viewportWidth, viewportHeight, state.cardSelections.length, questions, handleQuizAnswer, handleAssessmentComplete]);
+
+  const memoizedQuizManager = useMemo(() => (
+    <QuizManager
+      selectedCard={state.cardSelections[state.cardSelections.length - 1]}
+      onQuizAnswer={handleQuizAnswer}
+      questions={questions}
+      currentQuestionIndex={state.currentQuestionIndex}
+      onComplete={handleAssessmentComplete}
+    />
+  ), [state.cardSelections, handleQuizAnswer, questions, state.currentQuestionIndex, handleAssessmentComplete]);
+
+  const memoizedResultsSummary = useMemo(() => (
+    <ResultsSummary
+      cardSelections={state.cardSelections}
+      quizAnswers={state.quizAnswers}
+      questions={questions}
+    />
+  ), [state.cardSelections, state.quizAnswers, questions]);
+
+  const progress = useMemo(() => {
+    const totalSteps = 5; // 5 card selections
+    const stepsCompleted = state.cardSelections.length + (state.quizAnswers.length / 10);
+    const progressValue = (stepsCompleted / totalSteps) * 100;
+    log('Progress calculated', { stepsCompleted, totalSteps, progressValue });
+    return progressValue;
+  }, [state.cardSelections.length, state.quizAnswers.length]);
+
+  useEffect(() => {
+    if (state.stage === 'card_selection') {
+      log('Rendering CardSelection component');
+    }
+  }, [state.stage]);
+
+  useEffect(() => {
+    if (state.stage === 'quiz') {
+      log('Rendering QuizManager component');
+    }
+  }, [state.stage]);
+
+  useEffect(() => {
+    if (state.stage === 'complete') {
+      log('Rendering ResultsSummary component');
+    }
+  }, [state.stage]);
+
   return (
-    <div className="fixed inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 w-full h-full flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-indigo-900 to-purple-900">
+      <StarryBackground intensity={1.5} />
+      <div className="w-full max-w-4xl px-4 py-8 relative z-10">
+        <ProgressBar progress={progress} />
+      </div>
       <AnimatePresence mode="wait">
         {state.stage === 'card_selection' && (
           <motion.div
             key="card-selection"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.5 }}
+            className="w-full max-w-4xl"
           >
-            <CardSelection
-              initialCards={state.currentCards}
-              onSelectionComplete={handleCardSelect}
-              viewportWidth={viewportWidth}
-              viewportHeight={viewportHeight}
-              isMidAssessment={state.cardSelections.length > 0}
-              questions={questions}
-              onQuizComplete={handleQuizAnswer}
-              onAssessmentComplete={handleAssessmentComplete}
-            />
+            {memoizedCardSelection}
           </motion.div>
         )}
         {state.stage === 'quiz' && (
           <motion.div
             key="quiz"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.5 }}
+            className="w-full max-w-4xl"
           >
-            <QuizManager
-              selectedCard={state.cardSelections[state.cardSelections.length - 1]}
-              onQuizAnswer={handleQuizAnswer}
-              questions={questions}
-              currentQuestionIndex={state.currentQuestionIndex}
-              onComplete={handleAssessmentComplete}
-            />
+            {memoizedQuizManager}
           </motion.div>
         )}
         {state.stage === 'complete' && (
           <motion.div
             key="assessment-complete"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.5 }}
-            className="w-full max-w-2xl mx-auto"
+            className="w-full max-w-4xl"
           >
-            <ResultsSummary
-              cardSelections={state.cardSelections}
-              quizAnswers={state.quizAnswers}
-              questions={questions}
-            />
+            {memoizedResultsSummary}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
-};
+});
+
+PersonalityAssessment.displayName = 'PersonalityAssessment';
 
 export default PersonalityAssessment;
